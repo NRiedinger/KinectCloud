@@ -1,16 +1,21 @@
 struct VertexInput {
-	@location(0) position: vec2f,
-	@location(1) color: vec3f,
+	@location(0) position: vec3f,
+	@location(1) normal: vec3f,
+	@location(2) color: vec3f,
+	@location(3) uv: vec2f,
 };
 
 struct VertexOutput {
 	@builtin(position) position: vec4f,
 	@location(0) color: vec3f,
+	@location(1) normal: vec3f,
+	@location(2) uv: vec2f,
 };
 
 struct Uniforms_t {
-	color: vec4f,
-	time: f32
+	projectionMatrix: mat4x4f,
+	viewMatrix: mat4x4f,
+	modelMatrix: mat4x4f,
 };
 @group(0) @binding(0) var<uniform> uniforms: Uniforms_t;
 
@@ -18,11 +23,11 @@ struct Uniforms_t {
 fn vs_main(in: VertexInput) -> VertexOutput {
 	var out: VertexOutput;
 
-	let ratio = 640.0 / 480.0;
-	var offset = vec2f(-0.6875, -0.463);
-	offset += 0.3 * vec2f(cos(uniforms.time), sin(uniforms.time));
-	out.position = vec4f(in.position.x + offset.x, (in.position.y + offset.y) * ratio, 0.0, 1.0);
-	out.color = in.color * uniforms.color.rgb;
+	out.position = uniforms.projectionMatrix * uniforms.viewMatrix * uniforms.modelMatrix * vec4f(in.position, 1.0);
+	out.normal = (uniforms.modelMatrix * vec4f(in.normal, 0.0)).xyz;
+	out.color = in.color;
+	out.uv = in.uv;
+	
 	return out;
 }
 

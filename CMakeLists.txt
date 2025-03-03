@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.0...3.25)
 project(
-    "C++ WebGPU Test" # name of the project, which will also be the name of the visual studio solution if you use it
+    "DepthSplat" # name of the project, which will also be the name of the visual studio solution if you use it
     VERSION 0.1.0 # any version number
     LANGUAGES CXX C # programming languages used by the project
 )
@@ -23,8 +23,15 @@ set(SOURCES
 	src/implementations.cpp
 	src/ResourceManager.cpp
 	src/ResourceManager.h
+	src/Point3D.h
+	src/Uniforms.h
 )
 add_executable(App ${SOURCES})
+
+# for glm
+target_include_directories(App PRIVATE ./libs)
+target_compile_definitions(App PRIVATE GLM_FORCE_DEPTH_ZERO_TO_ONE)
+target_compile_definitions(App PRIVATE GLM_FORCE_LEFT_HANDED) 
 
 # add libraries as dependency to App
 set(LIBRARIES
