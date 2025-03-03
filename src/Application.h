@@ -16,6 +16,7 @@ public:
 	void onFrame();
 	void onFinish();
 	bool isRunning();
+	void onResize();
 
 private:
 	bool initWindowAndDevice();
@@ -38,6 +39,9 @@ private:
 
 	bool initBindGroup();
 	void terminateBindGroup();
+
+
+	void updateProjectionMatrix();
 
 private:
 	// window and deivce

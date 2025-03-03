@@ -93,7 +93,7 @@ void Application::onFrame()
 	renderPassDesc.timestampWrites = nullptr;
 
 	wgpu::RenderPassEncoder renderPass = encoder.beginRenderPass(renderPassDesc);
-	
+
 	renderPass.setPipeline(m_renderPipeline);
 	renderPass.setVertexBuffer(0, m_vertexBuffer, 0, m_vertexBuffer.getSize()/*m_vertexCount * sizeof(VertexAttributes)*/);
 	renderPass.setBindGroup(0, m_bindGroup, 0, nullptr);
@@ -103,7 +103,7 @@ void Application::onFrame()
 	renderPass.end();
 	renderPass.release();
 
-	
+
 	wgpu::CommandBufferDescriptor commandBufferDesc{};
 	commandBufferDesc.label = "command buffer";
 	wgpu::CommandBuffer command = encoder.finish(commandBufferDesc);
@@ -132,6 +132,17 @@ bool Application::isRunning()
 	return !glfwWindowShouldClose(m_window);
 }
 
+void Application::onResize()
+{
+	// terminate in reverse order
+	terminateDepthBuffer();
+	terminateSwapChain();
+
+	// re-initialize
+	initSwapChain();
+	initDepthBuffer();
+}
+
 bool Application::initWindowAndDevice()
 {
 	// create instance
@@ -158,7 +169,7 @@ bool Application::initWindowAndDevice()
 		return false;
 	}
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+	glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 	m_window = glfwCreateWindow(WINDOW_W, WINDOW_H, WINDOW_TITLE, NULL, NULL);
 	if (!m_window) {
 		std::cerr << "Could not open window!" << std::endl;
@@ -230,6 +241,15 @@ bool Application::initWindowAndDevice()
 
 	m_queue = m_device.getQueue();
 
+	// set the user pointer to be "this"
+	glfwSetWindowUserPointer(m_window, this);
+	glfwSetFramebufferSizeCallback(m_window, [](GLFWwindow* window, int, int) {
+		auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
+		if (that) {
+			that->onResize();
+		}
+	});
+
 	adapter.release();
 
 	return true;
@@ -248,10 +268,13 @@ void Application::terminateWindowAndDevice()
 
 bool Application::initSwapChain()
 {
+	int width, height;
+	glfwGetFramebufferSize(m_window, &width, &height);
+
 	std::cout << "Creating swapchain..." << std::endl;
 	wgpu::SwapChainDescriptor swapChainDesc{};
-	swapChainDesc.width = WINDOW_W;
-	swapChainDesc.height = WINDOW_H;
+	swapChainDesc.width = static_cast<uint32_t>(width);
+	swapChainDesc.height = static_cast<uint32_t>(height);
 	swapChainDesc.usage = wgpu::TextureUsage::RenderAttachment;
 	swapChainDesc.format = m_swapChainFormat;
 	swapChainDesc.presentMode = wgpu::PresentMode::Fifo;
@@ -271,13 +294,16 @@ void Application::terminateSwapChain()
 
 bool Application::initDepthBuffer()
 {
+	int width, height;
+	glfwGetFramebufferSize(m_window, &width, &height);
+
 	std::cout << "Initializing depth buffer..." << std::endl;
 	wgpu::TextureDescriptor depthTextureDesc{};
 	depthTextureDesc.dimension = wgpu::TextureDimension::_2D;
 	depthTextureDesc.format = m_depthTextureFormat;
 	depthTextureDesc.mipLevelCount = 1;
 	depthTextureDesc.sampleCount = 1;
-	depthTextureDesc.size = { WINDOW_W, WINDOW_H, 1 };
+	depthTextureDesc.size = { static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1 };
 	depthTextureDesc.usage = wgpu::TextureUsage::RenderAttachment;
 	depthTextureDesc.viewFormatCount = 1;
 	depthTextureDesc.viewFormats = (WGPUTextureFormat*)&m_depthTextureFormat;
@@ -476,7 +502,7 @@ bool Application::initGeometry()
 		return false;
 	}
 	m_queue.writeBuffer(m_vertexBuffer, 0, vertexData.data(), bufferDesc.size);
-	
+
 	std::cout << "Vertex buffer: " << m_vertexBuffer << std::endl;
 	std::cout << "Vertex count: " << m_vertexCount << std::endl;
 
@@ -484,7 +510,7 @@ bool Application::initGeometry()
 }
 
 void Application::terminateGeometry()
-{	
+{
 	m_vertexBuffer.destroy();
 	m_vertexBuffer.release();
 	m_vertexCount = 0;
@@ -541,6 +567,16 @@ bool Application::initBindGroup()
 void Application::terminateBindGroup()
 {
 	m_bindGroup.release();
+}
+
+void Application::updateProjectionMatrix()
+{
+	int width, height;
+	glfwGetFramebufferSize(m_window, &width, &height);
+
+	float ratio = width / (float)height;
+	m_renderUniforms.projectionMatrix = glm::perspective((float)(45 * M_PI / 180), ratio, .01f, 100.f);
+	m_queue.writeBuffer(m_renderUniformBuffer, offsetof(Uniforms::RenderUniforms, projectionMatrix), &m_renderUniforms.projectionMatrix, sizeof(Uniforms::RenderUniforms::projectionMatrix));
 }
 
 
