@@ -1,6 +1,6 @@
 #include <filesystem>
 #include <webgpu/webgpu.hpp>
-#include "Point3D.h"
+#include "Structs.h"
 
 #pragma once
 class ResourceManager {

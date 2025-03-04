@@ -1,11 +1,11 @@
 #include <GLFW/glfw3.h>
 #include <webgpu/webgpu.hpp>
-#include "Uniforms.h"
+#include "Structs.h"
 
 #include <array>
 
-#define WINDOW_W 640
-#define WINDOW_H 480
+#define WINDOW_W 1280
+#define WINDOW_H 960
 #define WINDOW_TITLE "DepthSplat"
 
 #pragma once
@@ -16,7 +16,12 @@ public:
 	void onFrame();
 	void onFinish();
 	bool isRunning();
+
+	// event handlers
 	void onResize();
+	void onMouseMove(double xPos, double yPos);
+	void onMouseButton(int button, int action, int mods);
+	void onScroll(double xOffset, double yOffset);
 
 private:
 	bool initWindowAndDevice();
@@ -42,6 +47,9 @@ private:
 
 
 	void updateProjectionMatrix();
+	void updateViewMatrix();
+
+	void updateDragInertia();
 
 private:
 	// window and deivce
@@ -70,10 +78,6 @@ private:
 	// geometry
 	wgpu::Buffer m_vertexBuffer = nullptr;
 	int m_vertexCount = 0;
-	
-	/*wgpu::Buffer m_pointBuffer;
-	wgpu::Buffer m_indexBuffer;
-	uint32_t m_indexCount;*/
 
 	// render uniforms
 	Uniforms::RenderUniforms m_renderUniforms;
@@ -82,5 +86,8 @@ private:
 	// bind group
 	wgpu::BindGroup m_bindGroup = nullptr;
 
+	// camera
+	CameraState m_cameraState;
+	DragState m_dragState;
 };
 

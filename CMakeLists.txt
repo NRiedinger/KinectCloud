@@ -23,8 +23,7 @@ set(SOURCES
 	src/implementations.cpp
 	src/ResourceManager.cpp
 	src/ResourceManager.h
-	src/Point3D.h
-	src/Uniforms.h
+	src/Structs.h
 )
 add_executable(App ${SOURCES})
 

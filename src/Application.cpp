@@ -43,6 +43,7 @@ bool Application::onInit()
 void Application::onFrame()
 {
 	glfwPollEvents();
+	updateDragInertia();
 
 	wgpu::TextureView nextTexture = m_swapChain.getCurrentTextureView();
 	if (!nextTexture) {
@@ -143,6 +144,50 @@ void Application::onResize()
 	initDepthBuffer();
 }
 
+void Application::onMouseMove(double xPos, double yPos)
+{
+	if (m_dragState.active) {
+		glm::vec2 currentMouse = glm::vec2(-(float)xPos, (float)yPos);
+		glm::vec2 delta = (currentMouse - m_dragState.startMouse) * m_dragState.SENSITIVITY;
+		m_cameraState.angles = m_dragState.startCameraState.angles + delta;
+
+		// inertia
+		m_dragState.velocity = delta - m_dragState.previousDelta;
+		m_dragState.previousDelta = delta;
+
+		// clamp pitch
+		m_cameraState.angles.y = glm::clamp(m_cameraState.angles.y, -(float)M_PI / 2 + 1e-5f, (float)M_PI / 2 - 1e-5f);
+		updateViewMatrix();
+	}
+}
+
+void Application::onMouseButton(int button, int action, int mods)
+{
+	if (button == GLFW_MOUSE_BUTTON_LEFT) {
+		switch (action) {
+			case GLFW_PRESS:
+				m_dragState.active = true;
+				double xPos, yPos;
+				glfwGetCursorPos(m_window, &xPos, &yPos);
+				m_dragState.startMouse = glm::vec2(-(float)xPos, (float)yPos);
+				m_dragState.startCameraState = m_cameraState;
+				break;
+			case GLFW_RELEASE:
+				m_dragState.active = false;
+				break;
+			default:
+				break;
+		}
+	}
+}
+
+void Application::onScroll(double xOffset, double yOffset)
+{
+	m_cameraState.zoom += m_dragState.SCROLL_SENSITIVITY * static_cast<float>(yOffset);
+	m_cameraState.zoom = glm::clamp(m_cameraState.zoom, -2.f, 2.f);
+	updateViewMatrix();
+}
+
 bool Application::initWindowAndDevice()
 {
 	// create instance
@@ -241,14 +286,38 @@ bool Application::initWindowAndDevice()
 
 	m_queue = m_device.getQueue();
 
-	// set the user pointer to be "this"
+	// glfw window callbacks
 	glfwSetWindowUserPointer(m_window, this);
+
 	glfwSetFramebufferSizeCallback(m_window, [](GLFWwindow* window, int, int) {
 		auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
 		if (that) {
 			that->onResize();
 		}
 	});
+
+	glfwSetCursorPosCallback(m_window, [](GLFWwindow* window, double xPos, double yPos) {
+		auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
+		if (that) {
+			that->onMouseMove(xPos, yPos);
+		}
+	});
+
+	glfwSetMouseButtonCallback(m_window, [](GLFWwindow* window, int button, int action, int mods) {
+		auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
+		if (that) {
+			that->onMouseButton(button, action, mods);
+		}
+	});
+
+	glfwSetScrollCallback(m_window, [](GLFWwindow* window, double xOffset, double yOffset) {
+		auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
+		if (that) {
+			that->onScroll(xOffset, yOffset);
+		}
+	});
+
+
 
 	adapter.release();
 
@@ -534,6 +603,8 @@ bool Application::initUniforms()
 	m_renderUniforms.projectionMatrix = glm::perspective((float)(45 * M_PI / 180), (float)(WINDOW_W / WINDOW_H), 0.01f, 100.0f);
 	m_queue.writeBuffer(m_renderUniformBuffer, 0, &m_renderUniforms, sizeof(Uniforms::RenderUniforms));
 
+	updateViewMatrix();
+
 	return true;
 }
 
@@ -577,6 +648,35 @@ void Application::updateProjectionMatrix()
 	float ratio = width / (float)height;
 	m_renderUniforms.projectionMatrix = glm::perspective((float)(45 * M_PI / 180), ratio, .01f, 100.f);
 	m_queue.writeBuffer(m_renderUniformBuffer, offsetof(Uniforms::RenderUniforms, projectionMatrix), &m_renderUniforms.projectionMatrix, sizeof(Uniforms::RenderUniforms::projectionMatrix));
+}
+
+void Application::updateViewMatrix()
+{
+	float cx = cos(m_cameraState.angles.x);
+	float sx = sin(m_cameraState.angles.x);
+	float cy = cos(m_cameraState.angles.y);
+	float sy = sin(m_cameraState.angles.y);
+
+	glm::vec3 position = glm::vec3(cx * cy, sx * cy, sy) * std::exp(-m_cameraState.zoom);
+	m_renderUniforms.viewMatrix = glm::lookAt(position, glm::vec3(0.f), glm::vec3(0, 0, 1));
+	m_queue.writeBuffer(m_renderUniformBuffer, offsetof(Uniforms::RenderUniforms, viewMatrix), &m_renderUniforms.viewMatrix, sizeof(Uniforms::RenderUniforms::viewMatrix));
+}
+
+void Application::updateDragInertia()
+{
+	constexpr float eps = 1e-4f;
+
+	if (!m_dragState.active) {
+		if (std::abs(m_dragState.velocity.x) < eps && std::abs(m_dragState.velocity.y) < eps) {
+			return;
+		}
+
+		m_cameraState.angles += m_dragState.velocity;
+		m_cameraState.angles.y = glm::clamp(m_cameraState.angles.y, -(float)M_PI / 2 + 1e-5f, (float)M_PI / 2 - 1e-5f);
+	
+		m_dragState.velocity *= m_dragState.INERTIA;
+		updateViewMatrix();
+	}
 }
 
 
