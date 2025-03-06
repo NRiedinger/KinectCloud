@@ -127,6 +127,8 @@ bool ResourceManager::readPoints3D(const std::filesystem::path& path, std::unord
 		return false;
 	}
 
+	result.clear();
+
 	uint64_t numPoints;
 	reader.read(reinterpret_cast<char*>(&numPoints), sizeof(numPoints));
 

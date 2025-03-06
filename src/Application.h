@@ -24,6 +24,8 @@ public:
 	void onScroll(double xOffset, double yOffset);
 
 private:
+	bool initPointCloud();
+
 	bool initWindowAndDevice();
 	void terminateWindowAndDevice();
 
@@ -89,5 +91,8 @@ private:
 	// camera
 	CameraState m_cameraState;
 	DragState m_dragState;
+
+	// point cloud
+	std::unordered_map<int64_t, Point3D> m_points;
 };
 

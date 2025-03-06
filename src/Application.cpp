@@ -16,6 +16,9 @@
 
 bool Application::onInit()
 {
+	if (!initPointCloud())
+		return false;
+
 	if (!initWindowAndDevice())
 		return false;
 
@@ -43,7 +46,7 @@ bool Application::onInit()
 void Application::onFrame()
 {
 	glfwPollEvents();
-	updateDragInertia();
+	// updateDragInertia();
 
 	wgpu::TextureView nextTexture = m_swapChain.getCurrentTextureView();
 	if (!nextTexture) {
@@ -52,12 +55,12 @@ void Application::onFrame()
 	}
 
 
-	// testing
-	auto time = static_cast<float>(glfwGetTime());
-	glm::mat4 M(1.0);
-	M = glm::rotate(M, time, glm::vec3(0.0, 0.0, 1.0));
-	m_renderUniforms.modelMatrix = M;
-	m_queue.writeBuffer(m_renderUniformBuffer, 0, &m_renderUniforms, sizeof(Uniforms::RenderUniforms));
+	//// testing
+	//auto time = static_cast<float>(glfwGetTime());
+	//glm::mat4 M(1.0);
+	//M = glm::rotate(M, time, glm::vec3(0.0, 0.0, 1.0));
+	//m_renderUniforms.modelMatrix = M;
+	//m_queue.writeBuffer(m_renderUniformBuffer, 0, &m_renderUniforms, sizeof(Uniforms::RenderUniforms));
 
 
 
@@ -99,7 +102,7 @@ void Application::onFrame()
 	renderPass.setVertexBuffer(0, m_vertexBuffer, 0, m_vertexBuffer.getSize()/*m_vertexCount * sizeof(VertexAttributes)*/);
 	renderPass.setBindGroup(0, m_bindGroup, 0, nullptr);
 	renderPass.draw(m_vertexCount, 1, 0, 0);
-
+	//renderPass.draw(m_vertexCount, 5, 0, 0);
 
 	renderPass.end();
 	renderPass.release();
@@ -186,6 +189,18 @@ void Application::onScroll(double xOffset, double yOffset)
 	m_cameraState.zoom += m_dragState.SCROLL_SENSITIVITY * static_cast<float>(yOffset);
 	m_cameraState.zoom = glm::clamp(m_cameraState.zoom, -2.f, 2.f);
 	updateViewMatrix();
+}
+
+bool Application::initPointCloud()
+{
+	/*if (!ResourceManager::readPoints3D(RESOURCE_DIR "/points3D.bin", m_points)) {
+		return false;
+	}
+
+	auto point = m_points.begin()->second;
+	std::cout << point.xyz.at(0) << " " << point.xyz.at(1) << " " << point.xyz.at(2) << std::endl;
+	*/
+	return true;
 }
 
 bool Application::initWindowAndDevice()
@@ -459,7 +474,8 @@ bool Application::initRenderPipeline()
 	renderPipelineDesc.vertex.constants = nullptr;
 
 
-	renderPipelineDesc.primitive.topology = wgpu::PrimitiveTopology::TriangleList;
+	// renderPipelineDesc.primitive.topology = wgpu::PrimitiveTopology::TriangleList;
+	renderPipelineDesc.primitive.topology = wgpu::PrimitiveTopology::PointList;
 	renderPipelineDesc.primitive.stripIndexFormat = wgpu::IndexFormat::Undefined;
 	renderPipelineDesc.primitive.frontFace = wgpu::FrontFace::CCW;
 	renderPipelineDesc.primitive.cullMode = wgpu::CullMode::None;
@@ -551,12 +567,45 @@ void Application::terminateRenderPipeline()
 
 bool Application::initGeometry()
 {
-	std::vector<float> vertexData;
-
-	if (!ResourceManager::loadGeometry(RESOURCE_DIR "/triangle.txt", vertexData)) {
-		std::cerr << "Could not load geometry!" << std::endl;
+	std::unordered_map<int64_t, Point3D> points;
+	if (!ResourceManager::readPoints3D(RESOURCE_DIR "/points3D.bin", points)) {
 		return false;
 	}
+
+	std::vector<float> vertexData;
+
+	/*if (!ResourceManager::loadGeometry(RESOURCE_DIR "/quad.txt", vertexData)) {
+		std::cerr << "Could not load geometry!" << std::endl;
+		return false;
+	}*/
+
+	for (auto kv : points) {
+		auto point = kv.second;
+
+		// x
+		vertexData.push_back(point.xyz.at(0));
+		// y
+		vertexData.push_back(point.xyz.at(1));
+		// z
+		vertexData.push_back(point.xyz.at(2));
+
+		// normals (keep 0 for now)
+		vertexData.push_back(0);
+		vertexData.push_back(0);
+		vertexData.push_back(0);
+
+		// r
+		vertexData.push_back(point.rgb.at(0));
+		// g
+		vertexData.push_back(point.rgb.at(1));
+		// b
+		vertexData.push_back(point.rgb.at(2));
+
+		// uv (keep 0 for now)
+		vertexData.push_back(0);
+		vertexData.push_back(0);
+	}
+
 
 	m_vertexCount = static_cast<int>(vertexData.size() / (sizeof(VertexAttributes) / sizeof(float)));
 
@@ -598,7 +647,7 @@ bool Application::initUniforms()
 	}
 
 	// initial uniform values
-	m_renderUniforms.modelMatrix = glm::mat4(1.0);
+	m_renderUniforms.modelMatrix = glm::scale(glm::mat4(1.0), glm::vec3(0.1));
 	m_renderUniforms.viewMatrix = glm::lookAt(glm::vec3(-5.f, -5.f, 3.f), glm::vec3(0.0f), glm::vec3(0, 0, 1));
 	m_renderUniforms.projectionMatrix = glm::perspective((float)(45 * M_PI / 180), (float)(WINDOW_W / WINDOW_H), 0.01f, 100.0f);
 	m_queue.writeBuffer(m_renderUniformBuffer, 0, &m_renderUniforms, sizeof(Uniforms::RenderUniforms));
@@ -673,7 +722,7 @@ void Application::updateDragInertia()
 
 		m_cameraState.angles += m_dragState.velocity;
 		m_cameraState.angles.y = glm::clamp(m_cameraState.angles.y, -(float)M_PI / 2 + 1e-5f, (float)M_PI / 2 - 1e-5f);
-	
+
 		m_dragState.velocity *= m_dragState.INERTIA;
 		updateViewMatrix();
 	}

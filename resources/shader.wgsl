@@ -1,4 +1,5 @@
 struct VertexInput {
+	@builtin(instance_index) instanceIdx: u32,
 	@location(0) position: vec3f,
 	@location(1) normal: vec3f,
 	@location(2) color: vec3f,
@@ -23,13 +24,18 @@ struct Uniforms_t {
 fn vs_main(in: VertexInput) -> VertexOutput {
 	var out: VertexOutput;
 
-	out.position = uniforms.projectionMatrix * uniforms.viewMatrix * uniforms.modelMatrix * vec4f(in.position, 1.0);
+	let instancePosition = in.position + vec3f(f32(in.instanceIdx), 0.0, 0.0);
+
+	out.position = uniforms.projectionMatrix * uniforms.viewMatrix * uniforms.modelMatrix * vec4f(in.position/*instancePosition*/, 1.0);
+	
 	out.normal = (uniforms.modelMatrix * vec4f(in.normal, 0.0)).xyz;
 	out.color = in.color;
 	out.uv = in.uv;
 	
 	return out;
 }
+
+
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
