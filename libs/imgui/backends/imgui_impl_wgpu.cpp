@@ -264,7 +264,7 @@ static WGPUProgrammableStageDescriptor ImGui_ImplWGPU_CreateShaderModule(const c
 #ifdef IMGUI_IMPL_WEBGPU_BACKEND_DAWN
 	WGPUShaderSourceWGSL wgsl_desc = {};
     wgsl_desc.chain.sType = WGPUSType_ShaderSourceWGSL;
-	wgsl_desc.code = { wgsl_source, WGPU_STRLEN };
+	wgsl_desc.code = wgsl_source;
 #else
 	WGPUShaderModuleWGSLDescriptor wgsl_desc = {};
     wgsl_desc.chain.sType = WGPUSType_ShaderModuleWGSLDescriptor;
@@ -277,7 +277,7 @@ static WGPUProgrammableStageDescriptor ImGui_ImplWGPU_CreateShaderModule(const c
     WGPUProgrammableStageDescriptor stage_desc = {};
     stage_desc.module = wgpuDeviceCreateShaderModule(bd->wgpuDevice, &desc);
 #ifdef IMGUI_IMPL_WEBGPU_BACKEND_DAWN
-    stage_desc.entryPoint = { "main", WGPU_STRLEN };
+    stage_desc.entryPoint = "main";
 #else
     stage_desc.entryPoint = "main";
 #endif
@@ -394,7 +394,6 @@ void ImGui_ImplWGPU_RenderDrawData(ImDrawData* draw_data, WGPURenderPassEncoder 
             nullptr,
             "Dear ImGui Vertex buffer",
 #ifdef IMGUI_IMPL_WEBGPU_BACKEND_DAWN
-            WGPU_STRLEN,
 #endif
             WGPUBufferUsage_CopyDst | WGPUBufferUsage_Vertex,
             MEMALIGN(fr->VertexBufferSize * sizeof(ImDrawVert), 4),
@@ -421,7 +420,6 @@ void ImGui_ImplWGPU_RenderDrawData(ImDrawData* draw_data, WGPURenderPassEncoder 
             nullptr,
             "Dear ImGui Index buffer",
 #ifdef IMGUI_IMPL_WEBGPU_BACKEND_DAWN
-            WGPU_STRLEN,
 #endif
             WGPUBufferUsage_CopyDst | WGPUBufferUsage_Index,
             MEMALIGN(fr->IndexBufferSize * sizeof(ImDrawIdx), 4),
@@ -534,7 +532,7 @@ static void ImGui_ImplWGPU_CreateFontsTexture()
     {
         WGPUTextureDescriptor tex_desc = {};
 #ifdef IMGUI_IMPL_WEBGPU_BACKEND_DAWN
-        tex_desc.label = { "Dear ImGui Font Texture", WGPU_STRLEN };
+        tex_desc.label = "Dear ImGui Font Texture";
 #else
         tex_desc.label = "Dear ImGui Font Texture";
 #endif
@@ -601,7 +599,6 @@ static void ImGui_ImplWGPU_CreateUniformBuffer()
         nullptr,
         "Dear ImGui Uniform buffer",
 #ifdef IMGUI_IMPL_WEBGPU_BACKEND_DAWN
-        WGPU_STRLEN,
 #endif
         WGPUBufferUsage_CopyDst | WGPUBufferUsage_Uniform,
         MEMALIGN(sizeof(Uniforms), 16),

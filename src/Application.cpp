@@ -9,6 +9,10 @@
 #include <glm/glm.hpp>
 #include <glm/ext.hpp>
 
+#include <imgui.h>
+#include <backends/imgui_impl_wgpu.h>
+#include <backends/imgui_impl_glfw.h>
+
 #define _USE_MATH_DEFINES
 #include <math.h>
 
@@ -38,6 +42,9 @@ bool Application::onInit()
 		return false;
 
 	if (!initBindGroup())
+		return false;
+
+	if (!initGui())
 		return false;
 
 	return true;
@@ -104,6 +111,9 @@ void Application::onFrame()
 	renderPass.draw(m_vertexCount, 1, 0, 0);
 	//renderPass.draw(m_vertexCount, 5, 0, 0);
 
+	// draw GUI
+	updateGui(renderPass);
+
 	renderPass.end();
 	renderPass.release();
 
@@ -123,6 +133,7 @@ void Application::onFrame()
 
 void Application::onFinish()
 {
+	terminateGui();
 	terminateBindGroup();
 	terminateUniforms();
 	terminateRenderPipeline();
@@ -259,7 +270,7 @@ bool Application::initWindowAndDevice()
 	requiredLimits.limits.minStorageBufferOffsetAlignment = supportedLimits.limits.minStorageBufferOffsetAlignment;
 	requiredLimits.limits.minUniformBufferOffsetAlignment = supportedLimits.limits.minUniformBufferOffsetAlignment;
 	requiredLimits.limits.maxInterStageShaderComponents = 8;
-	requiredLimits.limits.maxBindGroups = 1;
+	requiredLimits.limits.maxBindGroups = 2;
 	requiredLimits.limits.maxUniformBuffersPerShaderStage = 1;
 	requiredLimits.limits.maxUniformBufferBindingSize = 16 * 4 * sizeof(float);
 	// Allow textures up to 2K
@@ -726,6 +737,76 @@ void Application::updateDragInertia()
 		m_dragState.velocity *= m_dragState.INERTIA;
 		updateViewMatrix();
 	}
+}
+
+bool Application::initGui()
+{
+	// set up Dear ImGui context
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGui::GetIO();
+
+	// set up platform/renderer backends
+	if (!ImGui_ImplGlfw_InitForOther(m_window, true)) {
+		std::cerr << "Cannot initialize Dear ImGui for GLFW!" << std::endl;
+		return false;
+	}
+
+	ImGui_ImplWGPU_InitInfo initInfo{};
+	initInfo.Device = m_device;
+	initInfo.RenderTargetFormat = m_swapChainFormat;
+	initInfo.DepthStencilFormat = m_depthTextureFormat;
+	initInfo.NumFramesInFlight = 3;
+	if (!ImGui_ImplWGPU_Init(&initInfo)) {
+		std::cerr << "Cannot initialize Dear ImGui for WebGPU!" << std::endl;
+		return false;
+	}
+	return true;
+}
+
+void Application::terminateGui()
+{
+	ImGui_ImplGlfw_Shutdown();
+	ImGui_ImplWGPU_Shutdown();
+}
+
+void Application::updateGui(wgpu::RenderPassEncoder renderPass)
+{
+	// start ImGui frame
+	ImGui_ImplWGPU_NewFrame();
+	ImGui_ImplGlfw_NewFrame();
+	ImGui::NewFrame();
+
+	// build UI
+	// Build our UI
+	static float f = 0.0f;
+	static int counter = 0;
+	static bool show_demo_window = true;
+	static bool show_another_window = false;
+	static ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+
+	ImGui::Begin("Hello, world!");                                // Create a window called "Hello, world!" and append into it.
+
+	ImGui::Text("This is some useful text.");                     // Display some text (you can use a format strings too)
+	ImGui::Checkbox("Demo Window", &show_demo_window);            // Edit bools storing our window open/close state
+	ImGui::Checkbox("Another Window", &show_another_window);
+
+	ImGui::SliderFloat("float", &f, 0.0f, 1.0f);                  // Edit 1 float using a slider from 0.0f to 1.0f
+	ImGui::ColorEdit3("clear color", (float*)&clear_color);       // Edit 3 floats representing a color
+
+	if (ImGui::Button("Button"))                                  // Buttons return true when clicked (most widgets return true when edited/activated)
+		counter++;
+	ImGui::SameLine();
+	ImGui::Text("counter = %d", counter);
+
+	ImGuiIO& io = ImGui::GetIO();
+	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+	ImGui::End();
+
+	// draw UI
+	ImGui::EndFrame();
+	ImGui::Render();
+	ImGui_ImplWGPU_RenderDrawData(ImGui::GetDrawData(), renderPass);
 }
 
 

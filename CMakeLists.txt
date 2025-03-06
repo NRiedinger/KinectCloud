@@ -9,8 +9,8 @@ project(
 add_subdirectory(libs/glfw)
 # Include webgpu directory, to define the 'webgpu' target
 add_subdirectory(libs/webgpu)
-
-#add_subdirectory(libs/glfw3webgpu)
+# include ImGUI
+add_subdirectory(libs/imgui)
 
 
 # create a sources variable with a link to all cpp files to compile
@@ -36,6 +36,7 @@ target_compile_definitions(App PRIVATE GLM_FORCE_LEFT_HANDED)
 set(LIBRARIES
 	webgpu
 	glfw
+	imgui
 )
 target_link_libraries(App PRIVATE ${LIBRARIES})
 

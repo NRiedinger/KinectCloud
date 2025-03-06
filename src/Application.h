@@ -23,6 +23,7 @@ public:
 	void onMouseButton(int button, int action, int mods);
 	void onScroll(double xOffset, double yOffset);
 
+
 private:
 	bool initPointCloud();
 
@@ -52,6 +53,11 @@ private:
 	void updateViewMatrix();
 
 	void updateDragInertia();
+
+	// GUI
+	bool initGui();
+	void terminateGui();
+	void updateGui(wgpu::RenderPassEncoder renderPass);
 
 private:
 	// window and deivce
