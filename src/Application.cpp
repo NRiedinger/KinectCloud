@@ -177,6 +177,11 @@ void Application::onMouseMove(double xPos, double yPos)
 
 void Application::onMouseButton(int button, int action, int mods)
 {
+	ImGuiIO& io = ImGui::GetIO();
+	if (io.WantCaptureMouse) {
+		return;
+	}
+	
 	if (button == GLFW_MOUSE_BUTTON_LEFT) {
 		switch (action) {
 			case GLFW_PRESS:
@@ -197,6 +202,11 @@ void Application::onMouseButton(int button, int action, int mods)
 
 void Application::onScroll(double xOffset, double yOffset)
 {
+	ImGuiIO& io = ImGui::GetIO();
+	if (io.WantCaptureMouse) {
+		return;
+	}
+	
 	m_cameraState.zoom += m_dragState.SCROLL_SENSITIVITY * static_cast<float>(yOffset);
 	m_cameraState.zoom = glm::clamp(m_cameraState.zoom, -2.f, 2.f);
 	updateViewMatrix();
@@ -579,7 +589,7 @@ void Application::terminateRenderPipeline()
 bool Application::initGeometry()
 {
 	std::unordered_map<int64_t, Point3D> points;
-	if (!ResourceManager::readPoints3D(RESOURCE_DIR "/points3D.bin", points)) {
+	if (!ResourceManager::readPoints3D(RESOURCE_DIR "/points3D_garden.bin", points)) {
 		return false;
 	}
 
@@ -744,7 +754,11 @@ bool Application::initGui()
 	// set up Dear ImGui context
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
-	ImGui::GetIO();
+	auto io = ImGui::GetIO();
+
+	// set up font
+	io.Fonts->AddFontFromFileTTF(RESOURCE_DIR "/ProggyClean.ttf", 26);
+	ImGui::GetStyle().ScaleAllSizes(2.f);
 
 	// set up platform/renderer backends
 	if (!ImGui_ImplGlfw_InitForOther(m_window, true)) {
@@ -761,6 +775,8 @@ bool Application::initGui()
 		std::cerr << "Cannot initialize Dear ImGui for WebGPU!" << std::endl;
 		return false;
 	}
+
+
 	return true;
 }
 
