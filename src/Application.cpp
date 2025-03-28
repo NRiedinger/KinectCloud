@@ -1,5 +1,5 @@
 #include "Application.h"
-#include "glfw3webgpu.h"
+#include "utils/glfw3webgpu.h"
 #include "ResourceManager.h"
 
 #include <iostream>
@@ -18,44 +18,44 @@
 
 
 
-bool Application::onInit()
+bool Application::on_init()
 {
-	if (!initPointCloud())
+	if (!init_pointcloud())
 		return false;
 
-	if (!initWindowAndDevice())
+	if (!init_window_and_device())
 		return false;
 
-	if (!initSwapChain())
+	if (!init_swapchain())
 		return false;
 
-	if (!initDepthBuffer())
+	if (!init_depthbuffer())
 		return false;
 
-	if (!initRenderPipeline())
+	if (!init_renderpipeline())
 		return false;
 
-	if (!initGeometry())
+	if (!init_geometry())
 		return false;
 
-	if (!initUniforms())
+	if (!init_uniforms())
 		return false;
 
-	if (!initBindGroup())
+	if (!init_bindgroup())
 		return false;
 
-	if (!initGui())
+	if (!init_gui())
 		return false;
 
 	return true;
 }
 
-void Application::onFrame()
+void Application::on_frame()
 {
 	glfwPollEvents();
 	// updateDragInertia();
 
-	wgpu::TextureView nextTexture = m_swapChain.getCurrentTextureView();
+	wgpu::TextureView nextTexture = m_swapchain.getCurrentTextureView();
 	if (!nextTexture) {
 		std::cerr << "Cannot get next swap chain texture!" << std::endl;
 		return;
@@ -89,7 +89,7 @@ void Application::onFrame()
 	renderPassDesc.colorAttachments = &renderPassColorAttachment;
 
 	wgpu::RenderPassDepthStencilAttachment depthStencilAttachment{};
-	depthStencilAttachment.view = m_depthTextureView;
+	depthStencilAttachment.view = m_depthtexture_view;
 	depthStencilAttachment.depthClearValue = 1.f;
 	depthStencilAttachment.depthLoadOp = wgpu::LoadOp::Clear;
 	depthStencilAttachment.depthStoreOp = wgpu::StoreOp::Store;
@@ -105,14 +105,14 @@ void Application::onFrame()
 
 	wgpu::RenderPassEncoder renderPass = encoder.beginRenderPass(renderPassDesc);
 
-	renderPass.setPipeline(m_renderPipeline);
-	renderPass.setVertexBuffer(0, m_vertexBuffer, 0, m_vertexBuffer.getSize()/*m_vertexCount * sizeof(VertexAttributes)*/);
-	renderPass.setBindGroup(0, m_bindGroup, 0, nullptr);
-	renderPass.draw(m_vertexCount, 1, 0, 0);
+	renderPass.setPipeline(m_renderpipeline);
+	renderPass.setVertexBuffer(0, m_vertexbuffer, 0, m_vertexbuffer.getSize()/*m_vertexCount * sizeof(VertexAttributes)*/);
+	renderPass.setBindGroup(0, m_bindgroup, 0, nullptr);
+	renderPass.draw(m_vertexcount, 1, 0, 0);
 	//renderPass.draw(m_vertexCount, 5, 0, 0);
 
 	// draw GUI
-	updateGui(renderPass);
+	update_gui(renderPass);
 
 	renderPass.end();
 	renderPass.release();
@@ -126,56 +126,52 @@ void Application::onFrame()
 	m_queue.submit(command);
 
 	nextTexture.release();
-	m_swapChain.present();
+	m_swapchain.present();
 
 	m_device.tick();
 }
 
-void Application::onFinish()
+void Application::on_finish()
 {
-	terminateGui();
-	terminateBindGroup();
-	terminateUniforms();
-	terminateRenderPipeline();
-	terminateDepthBuffer();
-	terminateSwapChain();
-	terminateWindowAndDevice();
+	terminate_gui();
+	terminate_bindgroup();
+	terminate_uniforms();
+	terminate_renderpipeline();
+	terminate_depthbuffer();
+	terminate_swapchain();
+	terminate_window_and_device();
 }
 
-bool Application::isRunning()
+bool Application::is_running()
 {
 	return !glfwWindowShouldClose(m_window);
 }
 
-void Application::onResize()
+void Application::on_resize()
 {
 	// terminate in reverse order
-	terminateDepthBuffer();
-	terminateSwapChain();
+	terminate_depthbuffer();
+	terminate_swapchain();
 
 	// re-initialize
-	initSwapChain();
-	initDepthBuffer();
+	init_swapchain();
+	init_depthbuffer();
 }
 
-void Application::onMouseMove(double xPos, double yPos)
+void Application::on_mousemove(double xPos, double yPos)
 {
-	if (m_dragState.active) {
-		glm::vec2 currentMouse = glm::vec2(-(float)xPos, (float)yPos);
-		glm::vec2 delta = (currentMouse - m_dragState.startMouse) * m_dragState.SENSITIVITY;
-		m_cameraState.angles = m_dragState.startCameraState.angles + delta;
-
-		// inertia
-		m_dragState.velocity = delta - m_dragState.previousDelta;
-		m_dragState.previousDelta = delta;
+	if (m_dragstate.active) {
+		glm::vec2 currentMouse = glm::vec2((float)xPos, (float)yPos);
+		glm::vec2 delta = (currentMouse - m_dragstate.startMouse) * m_dragstate.SENSITIVITY;
+		m_camerastate.angles = m_dragstate.startCameraState.angles + delta;
 
 		// clamp pitch
-		m_cameraState.angles.y = glm::clamp(m_cameraState.angles.y, -(float)M_PI / 2 + 1e-5f, (float)M_PI / 2 - 1e-5f);
-		updateViewMatrix();
+		m_camerastate.angles.y = glm::clamp(m_camerastate.angles.y, -(float)M_PI / 2 + 1e-5f, (float)M_PI / 2 - 1e-5f);
+		update_viewmatrix();
 	}
 }
 
-void Application::onMouseButton(int button, int action, int mods)
+void Application::on_mousebutton(int button, int action, int mods)
 {
 	ImGuiIO& io = ImGui::GetIO();
 	if (io.WantCaptureMouse) {
@@ -185,14 +181,14 @@ void Application::onMouseButton(int button, int action, int mods)
 	if (button == GLFW_MOUSE_BUTTON_LEFT) {
 		switch (action) {
 			case GLFW_PRESS:
-				m_dragState.active = true;
+				m_dragstate.active = true;
 				double xPos, yPos;
 				glfwGetCursorPos(m_window, &xPos, &yPos);
-				m_dragState.startMouse = glm::vec2(-(float)xPos, (float)yPos);
-				m_dragState.startCameraState = m_cameraState;
+				m_dragstate.startMouse = glm::vec2((float)xPos, (float)yPos);
+				m_dragstate.startCameraState = m_camerastate;
 				break;
 			case GLFW_RELEASE:
-				m_dragState.active = false;
+				m_dragstate.active = false;
 				break;
 			default:
 				break;
@@ -200,19 +196,19 @@ void Application::onMouseButton(int button, int action, int mods)
 	}
 }
 
-void Application::onScroll(double xOffset, double yOffset)
+void Application::on_scroll(double xOffset, double yOffset)
 {
 	ImGuiIO& io = ImGui::GetIO();
 	if (io.WantCaptureMouse) {
 		return;
 	}
 	
-	m_cameraState.zoom += m_dragState.SCROLL_SENSITIVITY * static_cast<float>(yOffset);
-	m_cameraState.zoom = glm::clamp(m_cameraState.zoom, -2.f, 2.f);
-	updateViewMatrix();
+	m_camerastate.zoom += m_dragstate.SCROLL_SENSITIVITY * static_cast<float>(yOffset);
+	m_camerastate.zoom = glm::clamp(m_camerastate.zoom, -2.f, 2.f);
+	update_viewmatrix();
 }
 
-bool Application::initPointCloud()
+bool Application::init_pointcloud()
 {
 	/*if (!ResourceManager::readPoints3D(RESOURCE_DIR "/points3D.bin", m_points)) {
 		return false;
@@ -224,7 +220,7 @@ bool Application::initPointCloud()
 	return true;
 }
 
-bool Application::initWindowAndDevice()
+bool Application::init_window_and_device()
 {
 	// create instance
 	wgpu::InstanceDescriptor instanceDesc{};
@@ -304,7 +300,7 @@ bool Application::initWindowAndDevice()
 	std::cout << "Got device: " << m_device << std::endl;
 
 	// error callback for more debug info
-	m_uncapturedErrorCallback = m_device.setUncapturedErrorCallback([](wgpu::ErrorType type, char const* message) {
+	m_uncaptured_error_callback = m_device.setUncapturedErrorCallback([](wgpu::ErrorType type, char const* message) {
 		std::cout << "Device error: type " << type;
 		if (message) {
 			std::cout << " (message: " << message << ")";
@@ -312,7 +308,7 @@ bool Application::initWindowAndDevice()
 		std::cout << std::endl;
 	});
 
-	m_deviceLostCallback = m_device.setDeviceLostCallback([](wgpu::DeviceLostReason reason, char const* message) {
+	m_device_lost_callback = m_device.setDeviceLostCallback([](wgpu::DeviceLostReason reason, char const* message) {
 		std::cout << "Device error: reason " << reason;
 		if (message) {
 			std::cout << " (message: " << message << ")";
@@ -328,28 +324,28 @@ bool Application::initWindowAndDevice()
 	glfwSetFramebufferSizeCallback(m_window, [](GLFWwindow* window, int, int) {
 		auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
 		if (that) {
-			that->onResize();
+			that->on_resize();
 		}
 	});
 
 	glfwSetCursorPosCallback(m_window, [](GLFWwindow* window, double xPos, double yPos) {
 		auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
 		if (that) {
-			that->onMouseMove(xPos, yPos);
+			that->on_mousemove(xPos, yPos);
 		}
 	});
 
 	glfwSetMouseButtonCallback(m_window, [](GLFWwindow* window, int button, int action, int mods) {
 		auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
 		if (that) {
-			that->onMouseButton(button, action, mods);
+			that->on_mousebutton(button, action, mods);
 		}
 	});
 
 	glfwSetScrollCallback(m_window, [](GLFWwindow* window, double xOffset, double yOffset) {
 		auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
 		if (that) {
-			that->onScroll(xOffset, yOffset);
+			that->on_scroll(xOffset, yOffset);
 		}
 	});
 
@@ -360,7 +356,7 @@ bool Application::initWindowAndDevice()
 	return true;
 }
 
-void Application::terminateWindowAndDevice()
+void Application::terminate_window_and_device()
 {
 	m_queue.release();
 	m_device.release();
@@ -371,7 +367,7 @@ void Application::terminateWindowAndDevice()
 	glfwTerminate();
 }
 
-bool Application::initSwapChain()
+bool Application::init_swapchain()
 {
 	int width, height;
 	glfwGetFramebufferSize(m_window, &width, &height);
@@ -381,23 +377,24 @@ bool Application::initSwapChain()
 	swapChainDesc.width = static_cast<uint32_t>(width);
 	swapChainDesc.height = static_cast<uint32_t>(height);
 	swapChainDesc.usage = wgpu::TextureUsage::RenderAttachment;
-	swapChainDesc.format = m_swapChainFormat;
-	swapChainDesc.presentMode = wgpu::PresentMode::Fifo;
-	m_swapChain = m_device.createSwapChain(m_surface, swapChainDesc);
-	if (!m_swapChain) {
+	swapChainDesc.format = m_swapchain_format;
+	//swapChainDesc.presentMode = wgpu::PresentMode::Fifo;
+	swapChainDesc.presentMode = wgpu::PresentMode::Mailbox;
+	m_swapchain = m_device.createSwapChain(m_surface, swapChainDesc);
+	if (!m_swapchain) {
 		std::cerr << "Could not create swapchain!" << std::endl;
 		return false;
 	}
-	std::cout << "Swapchain: " << m_swapChain << std::endl;
+	std::cout << "Swapchain: " << m_swapchain << std::endl;
 	return true;
 }
 
-void Application::terminateSwapChain()
+void Application::terminate_swapchain()
 {
-	m_swapChain.release();
+	m_swapchain.release();
 }
 
-bool Application::initDepthBuffer()
+bool Application::init_depthbuffer()
 {
 	int width, height;
 	glfwGetFramebufferSize(m_window, &width, &height);
@@ -405,19 +402,19 @@ bool Application::initDepthBuffer()
 	std::cout << "Initializing depth buffer..." << std::endl;
 	wgpu::TextureDescriptor depthTextureDesc{};
 	depthTextureDesc.dimension = wgpu::TextureDimension::_2D;
-	depthTextureDesc.format = m_depthTextureFormat;
+	depthTextureDesc.format = m_depthtexture_format;
 	depthTextureDesc.mipLevelCount = 1;
 	depthTextureDesc.sampleCount = 1;
 	depthTextureDesc.size = { static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1 };
 	depthTextureDesc.usage = wgpu::TextureUsage::RenderAttachment;
 	depthTextureDesc.viewFormatCount = 1;
-	depthTextureDesc.viewFormats = (WGPUTextureFormat*)&m_depthTextureFormat;
-	m_depthTexture = m_device.createTexture(depthTextureDesc);
-	if (!m_depthTexture) {
+	depthTextureDesc.viewFormats = (WGPUTextureFormat*)&m_depthtexture_format;
+	m_depthtexture = m_device.createTexture(depthTextureDesc);
+	if (!m_depthtexture) {
 		std::cerr << "Could not create depth texture!" << std::endl;
 		return false;
 	}
-	std::cout << "Depth texture: " << m_depthTexture << std::endl;
+	std::cout << "Depth texture: " << m_depthtexture << std::endl;
 
 	wgpu::TextureViewDescriptor depthTextureViewDesc{};
 	depthTextureViewDesc.aspect = wgpu::TextureAspect::DepthOnly;
@@ -426,33 +423,33 @@ bool Application::initDepthBuffer()
 	depthTextureViewDesc.baseMipLevel = 0;
 	depthTextureViewDesc.mipLevelCount = 1;
 	depthTextureViewDesc.dimension = wgpu::TextureViewDimension::_2D;
-	depthTextureViewDesc.format = m_depthTextureFormat;
-	m_depthTextureView = m_depthTexture.createView(depthTextureViewDesc);
-	if (!m_depthTextureView) {
+	depthTextureViewDesc.format = m_depthtexture_format;
+	m_depthtexture_view = m_depthtexture.createView(depthTextureViewDesc);
+	if (!m_depthtexture_view) {
 		std::cerr << "Could not create depth texture view!" << std::endl;
 		return false;
 	}
-	std::cout << "Depth texture view: " << m_depthTextureView << std::endl;
+	std::cout << "Depth texture view: " << m_depthtexture_view << std::endl;
 
 	return true;
 }
 
-void Application::terminateDepthBuffer()
+void Application::terminate_depthbuffer()
 {
-	m_depthTextureView.release();
-	m_depthTexture.destroy();
-	m_depthTexture.release();
+	m_depthtexture_view.release();
+	m_depthtexture.destroy();
+	m_depthtexture.release();
 }
 
-bool Application::initRenderPipeline()
+bool Application::init_renderpipeline()
 {
 	std::cout << "Creating shader module..." << std::endl;
-	m_renderShaderModule = ResourceManager::loadShaderModule(RESOURCE_DIR "/shader.wgsl", m_device);
-	if (!m_renderShaderModule) {
+	m_rendershader_module = ResourceManager::load_shadermodule(RESOURCE_DIR "/shader.wgsl", m_device);
+	if (!m_rendershader_module) {
 		std::cerr << "Could not create render shader module!" << std::endl;
 		return false;
 	}
-	std::cout << "Render shader module: " << m_renderShaderModule << std::endl;
+	std::cout << "Render shader module: " << m_rendershader_module << std::endl;
 
 	std::cout << "Creating render pipeline..." << std::endl;
 	wgpu::RenderPipelineDescriptor renderPipelineDesc{};
@@ -489,7 +486,7 @@ bool Application::initRenderPipeline()
 	renderPipelineDesc.vertex.bufferCount = 1;
 	renderPipelineDesc.vertex.buffers = &vertexBufferLayout;
 
-	renderPipelineDesc.vertex.module = m_renderShaderModule;
+	renderPipelineDesc.vertex.module = m_rendershader_module;
 	renderPipelineDesc.vertex.entryPoint = "vs_main";
 	renderPipelineDesc.vertex.constantCount = 0;
 	renderPipelineDesc.vertex.constants = nullptr;
@@ -503,7 +500,7 @@ bool Application::initRenderPipeline()
 
 
 	wgpu::FragmentState fragmentState{};
-	fragmentState.module = m_renderShaderModule;
+	fragmentState.module = m_rendershader_module;
 	fragmentState.entryPoint = "fs_main";
 	fragmentState.constantCount = 0;
 	fragmentState.constants = nullptr;
@@ -518,7 +515,7 @@ bool Application::initRenderPipeline()
 	blendState.alpha.operation = wgpu::BlendOperation::Add;
 
 	wgpu::ColorTargetState colorTarget{};
-	colorTarget.format = m_swapChainFormat;
+	colorTarget.format = m_swapchain_format;
 	colorTarget.blend = &blendState;
 	colorTarget.writeMask = wgpu::ColorWriteMask::All;
 
@@ -529,7 +526,7 @@ bool Application::initRenderPipeline()
 	wgpu::DepthStencilState depthStencilState = wgpu::Default;
 	depthStencilState.depthCompare = wgpu::CompareFunction::Less;
 	depthStencilState.depthWriteEnabled = wgpu::OptionalBool::True;
-	depthStencilState.format = m_depthTextureFormat;
+	depthStencilState.format = m_depthtexture_format;
 	depthStencilState.stencilReadMask = 0;
 	depthStencilState.stencilWriteMask = 0;
 
@@ -550,8 +547,8 @@ bool Application::initRenderPipeline()
 	wgpu::BindGroupLayoutDescriptor bindGroupLayoutDesc{};
 	bindGroupLayoutDesc.entryCount = 1;
 	bindGroupLayoutDesc.entries = &bindGroupLayoutEntry;
-	m_bindGroupLayout = m_device.createBindGroupLayout(bindGroupLayoutDesc);
-	if (!m_bindGroupLayout) {
+	m_bindgroup_layout = m_device.createBindGroupLayout(bindGroupLayoutDesc);
+	if (!m_bindgroup_layout) {
 		std::cerr << "Could not create bind group layout!" << std::endl;
 		return false;
 	}
@@ -560,7 +557,7 @@ bool Application::initRenderPipeline()
 	// create pipeline layout
 	wgpu::PipelineLayoutDescriptor renderPipelineLayoutDesc{};
 	renderPipelineLayoutDesc.bindGroupLayoutCount = 1;
-	renderPipelineLayoutDesc.bindGroupLayouts = (WGPUBindGroupLayout*)&m_bindGroupLayout;
+	renderPipelineLayoutDesc.bindGroupLayouts = (WGPUBindGroupLayout*)&m_bindgroup_layout;
 
 	wgpu::PipelineLayout pipelineLayout = m_device.createPipelineLayout(renderPipelineLayoutDesc);
 	if (!pipelineLayout) {
@@ -569,27 +566,27 @@ bool Application::initRenderPipeline()
 	}
 	renderPipelineDesc.layout = pipelineLayout;
 
-	m_renderPipeline = m_device.createRenderPipeline(renderPipelineDesc);
-	if (!m_renderPipeline) {
+	m_renderpipeline = m_device.createRenderPipeline(renderPipelineDesc);
+	if (!m_renderpipeline) {
 		std::cerr << "Could not create render pipeline!" << std::endl;
 		return false;
 	}
-	std::cout << "Render pipeline: " << m_renderPipeline << std::endl;
+	std::cout << "Render pipeline: " << m_renderpipeline << std::endl;
 
 	return true;
 }
 
-void Application::terminateRenderPipeline()
+void Application::terminate_renderpipeline()
 {
-	m_renderPipeline.release();
-	m_renderShaderModule.release();
-	m_bindGroupLayout.release();
+	m_renderpipeline.release();
+	m_rendershader_module.release();
+	m_bindgroup_layout.release();
 }
 
-bool Application::initGeometry()
+bool Application::init_geometry()
 {
 	std::unordered_map<int64_t, Point3D> points;
-	if (!ResourceManager::readPoints3D(RESOURCE_DIR "/points3D_garden.bin", points)) {
+	if (!ResourceManager::read_points3d(RESOURCE_DIR "/points3D_garden.bin", points)) {
 		return false;
 	}
 
@@ -628,76 +625,76 @@ bool Application::initGeometry()
 	}
 
 
-	m_vertexCount = static_cast<int>(vertexData.size() / (sizeof(VertexAttributes) / sizeof(float)));
+	m_vertexcount = static_cast<int>(vertexData.size() / (sizeof(VertexAttributes) / sizeof(float)));
 
 	wgpu::BufferDescriptor bufferDesc{};
-	bufferDesc.size = m_vertexCount * sizeof(VertexAttributes);
+	bufferDesc.size = m_vertexcount * sizeof(VertexAttributes);
 	bufferDesc.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Vertex;
 	bufferDesc.mappedAtCreation = false;
 
-	m_vertexBuffer = m_device.createBuffer(bufferDesc);
-	if (!m_vertexBuffer) {
+	m_vertexbuffer = m_device.createBuffer(bufferDesc);
+	if (!m_vertexbuffer) {
 		std::cerr << "Could not create vertex buffer!" << std::endl;
 		return false;
 	}
-	m_queue.writeBuffer(m_vertexBuffer, 0, vertexData.data(), bufferDesc.size);
+	m_queue.writeBuffer(m_vertexbuffer, 0, vertexData.data(), bufferDesc.size);
 
-	std::cout << "Vertex buffer: " << m_vertexBuffer << std::endl;
-	std::cout << "Vertex count: " << m_vertexCount << std::endl;
+	std::cout << "Vertex buffer: " << m_vertexbuffer << std::endl;
+	std::cout << "Vertex count: " << m_vertexcount << std::endl;
 
 	return true;
 }
 
-void Application::terminateGeometry()
+void Application::terminate_geometry()
 {
-	m_vertexBuffer.destroy();
-	m_vertexBuffer.release();
-	m_vertexCount = 0;
+	m_vertexbuffer.destroy();
+	m_vertexbuffer.release();
+	m_vertexcount = 0;
 }
 
-bool Application::initUniforms()
+bool Application::init_uniforms()
 {
 	wgpu::BufferDescriptor bufferDesc{};
 	bufferDesc.size = sizeof(Uniforms::RenderUniforms);
 	bufferDesc.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform;
 	bufferDesc.mappedAtCreation = false;
-	m_renderUniformBuffer = m_device.createBuffer(bufferDesc);
-	if (!m_renderUniformBuffer) {
+	m_renderuniform_buffer = m_device.createBuffer(bufferDesc);
+	if (!m_renderuniform_buffer) {
 		std::cerr << "Could not create render uniform buffer!" << std::endl;
 		return false;
 	}
 
 	// initial uniform values
-	m_renderUniforms.modelMatrix = glm::scale(glm::mat4(1.0), glm::vec3(0.1));
-	m_renderUniforms.viewMatrix = glm::lookAt(glm::vec3(-5.f, -5.f, 3.f), glm::vec3(0.0f), glm::vec3(0, 0, 1));
-	m_renderUniforms.projectionMatrix = glm::perspective((float)(45 * M_PI / 180), (float)(WINDOW_W / WINDOW_H), 0.01f, 100.0f);
-	m_queue.writeBuffer(m_renderUniformBuffer, 0, &m_renderUniforms, sizeof(Uniforms::RenderUniforms));
+	m_renderuniforms.modelMatrix = glm::scale(glm::mat4(1.0), glm::vec3(0.1));
+	m_renderuniforms.viewMatrix = glm::lookAt(glm::vec3(-5.f, -5.f, 3.f), glm::vec3(0.0f), glm::vec3(0, 0, 1));
+	m_renderuniforms.projectionMatrix = glm::perspective((float)(45 * M_PI / 180), (float)(WINDOW_W / WINDOW_H), 0.01f, 100.0f);
+	m_queue.writeBuffer(m_renderuniform_buffer, 0, &m_renderuniforms, sizeof(Uniforms::RenderUniforms));
 
-	updateViewMatrix();
+	update_viewmatrix();
 
 	return true;
 }
 
-void Application::terminateUniforms()
+void Application::terminate_uniforms()
 {
-	m_renderUniformBuffer.destroy();
-	m_renderUniformBuffer.release();
+	m_renderuniform_buffer.destroy();
+	m_renderuniform_buffer.release();
 }
 
-bool Application::initBindGroup()
+bool Application::init_bindgroup()
 {
 	wgpu::BindGroupEntry binding;
 	binding.binding = 0;
-	binding.buffer = m_renderUniformBuffer;
+	binding.buffer = m_renderuniform_buffer;
 	binding.offset = 0;
 	binding.size = sizeof(Uniforms::RenderUniforms);
 
 	wgpu::BindGroupDescriptor bindGroupDesc{};
-	bindGroupDesc.layout = m_bindGroupLayout;
+	bindGroupDesc.layout = m_bindgroup_layout;
 	bindGroupDesc.entryCount = 1;
 	bindGroupDesc.entries = &binding;
-	m_bindGroup = m_device.createBindGroup(bindGroupDesc);
-	if (!m_bindGroup) {
+	m_bindgroup = m_device.createBindGroup(bindGroupDesc);
+	if (!m_bindgroup) {
 		std::cerr << "Could not create bind group!" << std::endl;
 		return false;
 	}
@@ -705,51 +702,46 @@ bool Application::initBindGroup()
 	return true;
 }
 
-void Application::terminateBindGroup()
+void Application::terminate_bindgroup()
 {
-	m_bindGroup.release();
+	m_bindgroup.release();
 }
 
-void Application::updateProjectionMatrix()
+void Application::update_projectionmatrix()
 {
 	int width, height;
 	glfwGetFramebufferSize(m_window, &width, &height);
 
 	float ratio = width / (float)height;
-	m_renderUniforms.projectionMatrix = glm::perspective((float)(45 * M_PI / 180), ratio, .01f, 100.f);
-	m_queue.writeBuffer(m_renderUniformBuffer, offsetof(Uniforms::RenderUniforms, projectionMatrix), &m_renderUniforms.projectionMatrix, sizeof(Uniforms::RenderUniforms::projectionMatrix));
+	m_renderuniforms.projectionMatrix = glm::perspective((float)(45 * M_PI / 180), ratio, .01f, 100.f);
+	m_queue.writeBuffer(m_renderuniform_buffer, offsetof(Uniforms::RenderUniforms, projectionMatrix), &m_renderuniforms.projectionMatrix, sizeof(Uniforms::RenderUniforms::projectionMatrix));
 }
 
-void Application::updateViewMatrix()
+void Application::update_viewmatrix()
 {
-	float cx = cos(m_cameraState.angles.x);
-	float sx = sin(m_cameraState.angles.x);
-	float cy = cos(m_cameraState.angles.y);
-	float sy = sin(m_cameraState.angles.y);
-
-	glm::vec3 position = glm::vec3(cx * cy, sx * cy, sy) * std::exp(-m_cameraState.zoom);
-	m_renderUniforms.viewMatrix = glm::lookAt(position, glm::vec3(0.f), glm::vec3(0, 0, 1));
-	m_queue.writeBuffer(m_renderUniformBuffer, offsetof(Uniforms::RenderUniforms, viewMatrix), &m_renderUniforms.viewMatrix, sizeof(Uniforms::RenderUniforms::viewMatrix));
+	glm::vec3 position = m_camerastate.get_camera_position();
+	m_renderuniforms.viewMatrix = glm::lookAt(position, glm::vec3(0.f), glm::vec3(0, 0, 1));
+	m_queue.writeBuffer(m_renderuniform_buffer, offsetof(Uniforms::RenderUniforms, viewMatrix), &m_renderuniforms.viewMatrix, sizeof(Uniforms::RenderUniforms::viewMatrix));
 }
 
-void Application::updateDragInertia()
+void Application::update_draginertia()
 {
 	constexpr float eps = 1e-4f;
 
-	if (!m_dragState.active) {
-		if (std::abs(m_dragState.velocity.x) < eps && std::abs(m_dragState.velocity.y) < eps) {
+	if (!m_dragstate.active) {
+		if (std::abs(m_dragstate.velocity.x) < eps && std::abs(m_dragstate.velocity.y) < eps) {
 			return;
 		}
 
-		m_cameraState.angles += m_dragState.velocity;
-		m_cameraState.angles.y = glm::clamp(m_cameraState.angles.y, -(float)M_PI / 2 + 1e-5f, (float)M_PI / 2 - 1e-5f);
+		m_camerastate.angles += m_dragstate.velocity;
+		m_camerastate.angles.y = glm::clamp(m_camerastate.angles.y, -(float)M_PI / 2 + 1e-5f, (float)M_PI / 2 - 1e-5f);
 
-		m_dragState.velocity *= m_dragState.INERTIA;
-		updateViewMatrix();
+		m_dragstate.velocity *= m_dragstate.INERTIA;
+		update_viewmatrix();
 	}
 }
 
-bool Application::initGui()
+bool Application::init_gui()
 {
 	// set up Dear ImGui context
 	IMGUI_CHECKVERSION();
@@ -757,8 +749,8 @@ bool Application::initGui()
 	auto io = ImGui::GetIO();
 
 	// set up font
-	io.Fonts->AddFontFromFileTTF(RESOURCE_DIR "/ProggyClean.ttf", 26);
-	ImGui::GetStyle().ScaleAllSizes(2.f);
+	/*io.Fonts->AddFontFromFileTTF(RESOURCE_DIR "/ProggyClean.ttf", 26);
+	ImGui::GetStyle().ScaleAllSizes(2.f);*/
 
 	// set up platform/renderer backends
 	if (!ImGui_ImplGlfw_InitForOther(m_window, true)) {
@@ -768,8 +760,8 @@ bool Application::initGui()
 
 	ImGui_ImplWGPU_InitInfo initInfo{};
 	initInfo.Device = m_device;
-	initInfo.RenderTargetFormat = m_swapChainFormat;
-	initInfo.DepthStencilFormat = m_depthTextureFormat;
+	initInfo.RenderTargetFormat = m_swapchain_format;
+	initInfo.DepthStencilFormat = m_depthtexture_format;
 	initInfo.NumFramesInFlight = 3;
 	if (!ImGui_ImplWGPU_Init(&initInfo)) {
 		std::cerr << "Cannot initialize Dear ImGui for WebGPU!" << std::endl;
@@ -780,13 +772,13 @@ bool Application::initGui()
 	return true;
 }
 
-void Application::terminateGui()
+void Application::terminate_gui()
 {
 	ImGui_ImplGlfw_Shutdown();
 	ImGui_ImplWGPU_Shutdown();
 }
 
-void Application::updateGui(wgpu::RenderPassEncoder renderPass)
+void Application::update_gui(wgpu::RenderPassEncoder renderPass)
 {
 	// start ImGui frame
 	ImGui_ImplWGPU_NewFrame();
@@ -801,22 +793,17 @@ void Application::updateGui(wgpu::RenderPassEncoder renderPass)
 	static bool show_another_window = false;
 	static ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
-	ImGui::Begin("Hello, world!");                                // Create a window called "Hello, world!" and append into it.
-
-	ImGui::Text("This is some useful text.");                     // Display some text (you can use a format strings too)
-	ImGui::Checkbox("Demo Window", &show_demo_window);            // Edit bools storing our window open/close state
-	ImGui::Checkbox("Another Window", &show_another_window);
-
-	ImGui::SliderFloat("float", &f, 0.0f, 1.0f);                  // Edit 1 float using a slider from 0.0f to 1.0f
-	ImGui::ColorEdit3("clear color", (float*)&clear_color);       // Edit 3 floats representing a color
-
-	if (ImGui::Button("Button"))                                  // Buttons return true when clicked (most widgets return true when edited/activated)
-		counter++;
-	ImGui::SameLine();
-	ImGui::Text("counter = %d", counter);
+	ImGui::Begin("DepthSplat Debug Info");                                // Create a window called "Hello, world!" and append into it.
 
 	ImGuiIO& io = ImGui::GetIO();
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+
+	ImGui::Text("Camera angle: [%.3f, %.3f]", m_camerastate.angles.x, m_camerastate.angles.y);
+	auto quat = glm::quat(glm::vec3(m_camerastate.angles.x, m_camerastate.angles.y, 0.f));
+	
+	auto other = glm::toMat3(quat) * glm::vec3(1.f);
+	ImGui::Text("Matrix: [%.3f, %.3f, %.3f]", other.x, other.y, other.z);
+
 	ImGui::End();
 
 	// draw UI

@@ -3,6 +3,9 @@
 #include <array>
 
 #include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/quaternion.hpp>
 
 #pragma once
 struct Point3D {
@@ -33,6 +36,16 @@ struct VertexAttributes {
 struct CameraState {
 	glm::vec2 angles = { .8f, .5f };
 	float zoom = -1.2f;
+	
+
+	glm::vec3 get_camera_position() {
+		float cx = cos(angles.x);
+		float sx = sin(angles.x);
+		float cy = cos(angles.y);
+		float sy = sin(angles.y);
+
+		return glm::vec3(cx * cy, sx * cy, sy) * std::exp(-zoom);
+	}
 };
 
 struct DragState {
@@ -47,4 +60,15 @@ struct DragState {
 	const float SENSITIVITY = .01f;
 	const float SCROLL_SENSITIVITY = .1f;
 	const float INERTIA = .9f;
+};
+
+
+struct Gaussian
+{
+	glm::vec3 mean;
+	glm::vec3 logScale;
+	float opacity;
+	glm::quat rotation;
+	glm::vec3 shDiffColor;
+	std::vector<float> shCoeffsRest;
 };

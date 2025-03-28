@@ -3,7 +3,9 @@
 #include <sstream>
 #include <string>
 
-bool ResourceManager::loadGeometry(const std::filesystem::path& path, std::vector<float>& pointData, std::vector<uint16_t>& indexData)
+#include "utils/tinyply.h"
+
+bool ResourceManager::load_geometry(const std::filesystem::path& path, std::vector<float>& pointData, std::vector<uint16_t>& indexData)
 {
 	std::ifstream file(path);
 	if (!file.is_open()) {
@@ -60,7 +62,7 @@ bool ResourceManager::loadGeometry(const std::filesystem::path& path, std::vecto
 	return true;
 }
 
-bool ResourceManager::loadGeometry(const std::filesystem::path& path, std::vector<float>& vertexData)
+bool ResourceManager::load_geometry(const std::filesystem::path& path, std::vector<float>& vertexData)
 {
 	std::ifstream file(path);
 	if (!file.is_open()) {
@@ -95,7 +97,7 @@ bool ResourceManager::loadGeometry(const std::filesystem::path& path, std::vecto
 	return true;
 }
 
-wgpu::ShaderModule ResourceManager::loadShaderModule(const std::filesystem::path& path, wgpu::Device device)
+wgpu::ShaderModule ResourceManager::load_shadermodule(const std::filesystem::path& path, wgpu::Device device)
 {
 	std::ifstream file(path);
 	if (!file.is_open()) {
@@ -119,11 +121,11 @@ wgpu::ShaderModule ResourceManager::loadShaderModule(const std::filesystem::path
 	return device.createShaderModule(shaderDesc);
 }
 
-bool ResourceManager::readPoints3D(const std::filesystem::path& path, std::unordered_map<int64_t, Point3D>& result)
+bool ResourceManager::read_points3d(const std::filesystem::path& path, std::unordered_map<int64_t, Point3D>& result)
 {
 	std::ifstream reader(path, std::ios::binary);
 	if (!reader.is_open()) {
-		std::cerr << "Failed to open Points3D file: " << path.c_str() << std::endl;
+		std::cerr << "Failed to open Points3D file: " << path.string() << std::endl;
 		return false;
 	}
 
@@ -170,5 +172,61 @@ bool ResourceManager::readPoints3D(const std::filesystem::path& path, std::unord
 		};
 	}
 
+	return true;
+}
+
+bool loadPlyFile( const std::filesystem::path& path, std::vector<Gaussian> gaussians )
+{
+	using namespace tinyply;
+	
+	std::ifstream fileStream( path, std::ios::binary );
+	if(!fileStream.is_open())
+	{
+		return false;
+	}
+
+
+	PlyFile file;
+	file.parse_header(fileStream);
+
+	/*std::cout << "\t[ply_header] Type: " << (file.is_binary_file() ? "binary" : "ascii") << std::endl;
+	for (const auto& c : file.get_comments()) std::cout << "\t[ply_header] Comment: " << c << std::endl;
+	for (const auto& c : file.get_info()) std::cout << "\t[ply_header] Info: " << c << std::endl;
+
+	for (const auto& e : file.get_elements())
+	{
+		std::cout << "\t[ply_header] element: " << e.name << " (" << e.size << ")" << std::endl;
+		for (const auto& p : e.properties)
+		{
+			std::cout << "\t[ply_header] \tproperty: " << p.name << " (type=" << tinyply::PropertyTable[p.propertyType].str << ")";
+			if (p.isList) std::cout << " (list_type=" << tinyply::PropertyTable[p.listType].str << ")";
+			std::cout << std::endl;
+		}
+	}*/
+
+	PlyElement vertex = file.get_elements().front();
+	if (vertex.name != "vertex") {
+		std::cerr << "First element must be 'vertex'!" << std::endl;
+		return false;
+	}
+
+	std::shared_ptr<PlyData> meansPtr = file.request_properties_from_element("vertex", { "x", "y", "z" });
+	std::shared_ptr<PlyData> logScalesPtr = file.request_properties_from_element("vertex", { "scale_0", "scale_1", "scale_2" });
+	std::shared_ptr<PlyData> opacitiesPtr = file.request_properties_from_element("vertex", { "opacity" });
+	std::shared_ptr<PlyData> rotationsPtr = file.request_properties_from_element("vertex", { "rot_0", "rot_1", "rot_2", "rot_3" });
+	std::shared_ptr<PlyData> shDiffColorsPtr = file.request_properties_from_element("vertex", { "f_dc_0", "f_dc_1", "f_dc_2" });
+	std::shared_ptr<PlyData> shCoeffsRestPtr;
+
+	file.read(fileStream);
+
+	
+	std::vector<glm::vec3> means(meansPtr->count);
+	std::memcpy(means.data(), meansPtr->buffer.get(), meansPtr->buffer.size_bytes());
+
+	std::vector<glm::vec3> opacities(opacitiesPtr->count);
+	std::memcpy(opacities.data(), opacitiesPtr->buffer.get(), opacitiesPtr->buffer.size_bytes());
+
+
+	
 	return true;
 }

@@ -12,52 +12,56 @@
 class Application
 {
 public:
-	bool onInit();
-	void onFrame();
-	void onFinish();
-	bool isRunning();
+	bool on_init();
+	void on_frame();
+	void on_finish();
+	bool is_running();
 
 	// event handlers
-	void onResize();
-	void onMouseMove(double xPos, double yPos);
-	void onMouseButton(int button, int action, int mods);
-	void onScroll(double xOffset, double yOffset);
+	void on_resize();
+	void on_mousemove(double xPos, double yPos);
+	void on_mousebutton(int button, int action, int mods);
+	void on_scroll(double xOffset, double yOffset);
+
+	CameraState get_camerastate() const {
+		return m_camerastate;
+	}
 
 
 private:
-	bool initPointCloud();
+	bool init_pointcloud();
 
-	bool initWindowAndDevice();
-	void terminateWindowAndDevice();
+	bool init_window_and_device();
+	void terminate_window_and_device();
 
-	bool initSwapChain();
-	void terminateSwapChain();
+	bool init_swapchain();
+	void terminate_swapchain();
 
-	bool initDepthBuffer();
-	void terminateDepthBuffer();
+	bool init_depthbuffer();
+	void terminate_depthbuffer();
 
-	bool initRenderPipeline();
-	void terminateRenderPipeline();
+	bool init_renderpipeline();
+	void terminate_renderpipeline();
 
-	bool initGeometry();
-	void terminateGeometry();
+	bool init_geometry();
+	void terminate_geometry();
 
-	bool initUniforms();
-	void terminateUniforms();
+	bool init_uniforms();
+	void terminate_uniforms();
 
-	bool initBindGroup();
-	void terminateBindGroup();
+	bool init_bindgroup();
+	void terminate_bindgroup();
 
 
-	void updateProjectionMatrix();
-	void updateViewMatrix();
+	void update_projectionmatrix();
+	void update_viewmatrix();
 
-	void updateDragInertia();
+	void update_draginertia();
 
 	// GUI
-	bool initGui();
-	void terminateGui();
-	void updateGui(wgpu::RenderPassEncoder renderPass);
+	bool init_gui();
+	void terminate_gui();
+	void update_gui(wgpu::RenderPassEncoder renderPass);
 
 private:
 	// window and deivce
@@ -66,37 +70,37 @@ private:
 	wgpu::Surface m_surface = nullptr;
 	wgpu::Device m_device = nullptr;
 	wgpu::Queue m_queue = nullptr;
-	std::unique_ptr<wgpu::ErrorCallback> m_uncapturedErrorCallback;
-	std::unique_ptr<wgpu::DeviceLostCallback> m_deviceLostCallback;
+	std::unique_ptr<wgpu::ErrorCallback> m_uncaptured_error_callback;
+	std::unique_ptr<wgpu::DeviceLostCallback> m_device_lost_callback;
 
 	// swap chain
-	wgpu::TextureFormat m_swapChainFormat = wgpu::TextureFormat::BGRA8Unorm;
-	wgpu::SwapChain m_swapChain = nullptr;
+	wgpu::TextureFormat m_swapchain_format = wgpu::TextureFormat::BGRA8Unorm;
+	wgpu::SwapChain m_swapchain = nullptr;
 
 	// depth buffer
-	wgpu::TextureFormat m_depthTextureFormat = wgpu::TextureFormat::Depth24Plus;
-	wgpu::Texture m_depthTexture = nullptr;
-	wgpu::TextureView m_depthTextureView = nullptr;
+	wgpu::TextureFormat m_depthtexture_format = wgpu::TextureFormat::Depth24Plus;
+	wgpu::Texture m_depthtexture = nullptr;
+	wgpu::TextureView m_depthtexture_view = nullptr;
 
 	// render pipeline
-	wgpu::BindGroupLayout m_bindGroupLayout = nullptr;
-	wgpu::ShaderModule m_renderShaderModule = nullptr;
-	wgpu::RenderPipeline m_renderPipeline = nullptr;
+	wgpu::BindGroupLayout m_bindgroup_layout = nullptr;
+	wgpu::ShaderModule m_rendershader_module = nullptr;
+	wgpu::RenderPipeline m_renderpipeline = nullptr;
 
 	// geometry
-	wgpu::Buffer m_vertexBuffer = nullptr;
-	int m_vertexCount = 0;
+	wgpu::Buffer m_vertexbuffer = nullptr;
+	int m_vertexcount = 0;
 
 	// render uniforms
-	Uniforms::RenderUniforms m_renderUniforms;
-	wgpu::Buffer m_renderUniformBuffer;
+	Uniforms::RenderUniforms m_renderuniforms;
+	wgpu::Buffer m_renderuniform_buffer;
 
 	// bind group
-	wgpu::BindGroup m_bindGroup = nullptr;
+	wgpu::BindGroup m_bindgroup = nullptr;
 
 	// camera
-	CameraState m_cameraState;
-	DragState m_dragState;
+	CameraState m_camerastate;
+	DragState m_dragstate;
 
 	// point cloud
 	std::unordered_map<int64_t, Point3D> m_points;

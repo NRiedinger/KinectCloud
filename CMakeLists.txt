@@ -16,14 +16,33 @@ add_subdirectory(libs/imgui)
 # create a sources variable with a link to all cpp files to compile
 set(SOURCES
 	src/main.cpp
+	
 	src/Application.cpp
 	src/Application.h
-	src/glfw3webgpu.c
-	src/glfw3webgpu.h
-	src/implementations.cpp
+	
 	src/ResourceManager.cpp
 	src/ResourceManager.h
+	
+	src/GaussianModel.cpp
+	src/GaussianModel.h
+	
+	src/Camera.h
+	src/Camera.cpp
+	
 	src/Structs.h
+	src/Helpers.h
+	
+	# utils
+	src/utils/implementations.cpp
+	src/utils/tinyply.h
+	src/utils/glfw3webgpu.c
+	src/utils/glfw3webgpu.h
+	
+	# gpu.cpp
+	src/gpu.cpp/gpu.h
+	src/gpu.cpp/half.h
+	src/gpu.cpp/half.cpp
+	src/gpu.cpp/logging.h
 )
 add_executable(App ${SOURCES})
 
@@ -56,7 +75,7 @@ target_copy_webgpu_binaries(App)
 
 
 set_target_properties(App PROPERTIES
-    CXX_STANDARD 17
+    CXX_STANDARD 20
     CXX_STANDARD_REQUIRED ON
     CXX_EXTENSIONS OFF
     COMPILE_WARNING_AS_ERROR OFF
