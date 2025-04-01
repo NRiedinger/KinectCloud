@@ -1,2 +1,2 @@
-cmake . -B build
+cmake . -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 pause

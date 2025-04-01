@@ -51,11 +51,18 @@ target_include_directories(App PRIVATE ./libs)
 target_compile_definitions(App PRIVATE GLM_FORCE_DEPTH_ZERO_TO_ONE)
 target_compile_definitions(App PRIVATE GLM_FORCE_LEFT_HANDED) 
 
+# Azure Kinect SDK
+target_include_directories(App PRIVATE "C:/Program Files/Azure Kinect SDK v1.4.2/sdk/include")
+target_link_directories(App PRIVATE "C:/Program Files/Azure Kinect SDK v1.4.2/sdk/windows-desktop/amd64/release/lib")
+
+
+
 # add libraries as dependency to App
 set(LIBRARIES
 	webgpu
 	glfw
 	imgui
+	k4a
 )
 target_link_libraries(App PRIVATE ${LIBRARIES})
 

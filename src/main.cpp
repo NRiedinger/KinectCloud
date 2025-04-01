@@ -1,82 +1,252 @@
-#include "Application.h"
-#include "ResourceManager.h"
-#include "GaussianModel.h"
+//#include "Application.h"
+//#include "ResourceManager.h"
+//#include "GaussianModel.h"
+//
+//#include <glm/glm.hpp>
+//#include <glm/gtc/quaternion.hpp>
+//#define GLM_ENABLE_EXPERIMENTAL
+//#include <glm/gtx/quaternion.hpp>
+//
+//#include <stdio.h>
+//#include <malloc.h>
+//#include <string.h>
+//#include "utils/k4a/k4a.h"
+//
+//int main(int, char**) {
+//
+//	Application app;
+//
+//	if (!app.on_init()) {
+//		return 1;
+//	}
+//
+//
+//	while (app.is_running()) {
+//		app.on_frame();
+//	}
+//
+//	app.on_finish();
+//
+//   
+//
+//	return 0;
+//}
 
-#include <glm/glm.hpp>
-#include <glm/gtc/quaternion.hpp>
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtx/quaternion.hpp>
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
 
-#include "gpu.cpp/gpu.h"
-#include <array>
-#include <cstdio>
-#include <future>
-using namespace gpu;
-static const char* kGelu = R"(
-const GELU_SCALING_FACTOR: f32 = 0.7978845608028654; // sqrt(2.0 / PI)
-@group(0) @binding(0) var<storage, read_write> inp: array<{{precision}}>;
-@group(0) @binding(1) var<storage, read_write> out: array<{{precision}}>;
-@group(0) @binding(1) var<storage, read_write> dummy: array<{{precision}}>;
-@compute @workgroup_size({{workgroupSize}})
-fn main(
-    @builtin(global_invocation_id) GlobalInvocationID: vec3<u32>) {
-    let i: u32 = GlobalInvocationID.x;
-    if (i < arrayLength(&inp)) {
-        let x: f32 = inp[i];
-        out[i] = select(0.5 * x * (1.0 + tanh(GELU_SCALING_FACTOR 
-                 * (x + .044715 * x * x * x))), x, x > 10.0);
+#include <k4a/k4a.h>
+#include <math.h>
+#include <string>
+#include <iostream>
+#include <fstream>
+#include <sstream>
+
+static void create_xy_table(const k4a_calibration_t* calibration, k4a_image_t xy_table)
+{
+    k4a_float2_t* table_data = (k4a_float2_t*)(void*)k4a_image_get_buffer(xy_table);
+
+    int width = calibration->depth_camera_calibration.resolution_width;
+    int height = calibration->depth_camera_calibration.resolution_height;
+
+    k4a_float2_t p;
+    k4a_float3_t ray;
+    int valid;
+
+    for (int y = 0, idx = 0; y < height; y++)
+    {
+        p.xy.y = (float)y;
+        for (int x = 0; x < width; x++, idx++)
+        {
+            p.xy.x = (float)x;
+
+            k4a_calibration_2d_to_3d(
+                calibration, &p, 1.f, K4A_CALIBRATION_TYPE_DEPTH, K4A_CALIBRATION_TYPE_DEPTH, &ray, &valid);
+
+            if (valid)
+            {
+                table_data[idx].xy.x = ray.xyz.x;
+                table_data[idx].xy.y = ray.xyz.y;
+            }
+            else
+            {
+                table_data[idx].xy.x = nanf("");
+                table_data[idx].xy.y = nanf("");
+            }
+        }
     }
 }
-)";
 
-int main(int, char**) {
+static void generate_point_cloud(const k4a_image_t depth_image,
+                                 const k4a_image_t xy_table,
+                                 k4a_image_t point_cloud,
+                                 int* point_count)
+{
+    int width = k4a_image_get_width_pixels(depth_image);
+    int height = k4a_image_get_height_pixels(depth_image);
 
-	//printf("\033[2J\033[1;1H");
-	//printf("\nHello gpu.cpp!\n");
-	//printf("--------------\n\n");
+    uint16_t* depth_data = (uint16_t*)(void*)k4a_image_get_buffer(depth_image);
+    k4a_float2_t* xy_table_data = (k4a_float2_t*)(void*)k4a_image_get_buffer(xy_table);
+    k4a_float3_t* point_cloud_data = (k4a_float3_t*)(void*)k4a_image_get_buffer(point_cloud);
 
-	//// std::unique_ptr<Context> ctx = createContext();
-	//Context ctx = createContext();
-	//static constexpr size_t N = 10000;
-	//std::array<float, N> inputArr, outputArr;
-	//for (int i = 0; i < N; ++i) {
-	//	inputArr[i] = static_cast<float>(i) / 10.0; // dummy input data
-	//}
-	//Tensor input = createTensor(ctx, Shape{ N }, kf32, inputArr.data());
-	//Tensor output = createTensor(ctx, Shape{ N }, kf32);
-	//std::promise<void> promise;
-	//std::future<void> future = promise.get_future();
-	//Kernel op = createKernel(ctx, { kGelu, 256, kf32 },
-	//						 Bindings{ input, output },
-	//						 { cdiv(N, 256), 1, 1 });
-	//dispatchKernel(ctx, op, promise);
-	//wait(ctx, future);
-	//toCPU(ctx, output, outputArr.data(), sizeof(outputArr));
-	//for (int i = 0; i < 12; ++i) {
-	//	printf("  gelu(%.2f) = %.2f\n", inputArr[i], outputArr[i]);
-	//}
-	//printf("  ...\n\n");
-	//printf("Computed %zu values of GELU(x)\n\n", N);
+    *point_count = 0;
+    for (int i = 0; i < width * height; i++)
+    {
+        if (depth_data[i] != 0 && !isnan(xy_table_data[i].xy.x) && !isnan(xy_table_data[i].xy.y))
+        {
+            point_cloud_data[i].xyz.x = xy_table_data[i].xy.x * (float)depth_data[i];
+            point_cloud_data[i].xyz.y = xy_table_data[i].xy.y * (float)depth_data[i];
+            point_cloud_data[i].xyz.z = (float)depth_data[i];
+            (*point_count)++;
+        }
+        else
+        {
+            point_cloud_data[i].xyz.x = nanf("");
+            point_cloud_data[i].xyz.y = nanf("");
+            point_cloud_data[i].xyz.z = nanf("");
+        }
+    }
+}
 
-	auto gaussian_model = new GaussianModel();
-	//gaussian_model->load_ply(RESOURCE_DIR "/point_cloud.ply");
+static void write_point_cloud(const char* file_name, const k4a_image_t point_cloud, int point_count)
+{
+    int width = k4a_image_get_width_pixels(point_cloud);
+    int height = k4a_image_get_height_pixels(point_cloud);
 
+    k4a_float3_t* point_cloud_data = (k4a_float3_t*)(void*)k4a_image_get_buffer(point_cloud);
 
+    // save to the ply file
+    std::ofstream ofs(file_name); // text mode first
+    ofs << "ply" << std::endl;
+    ofs << "format ascii 1.0" << std::endl;
+    ofs << "element vertex"
+        << " " << point_count << std::endl;
+    ofs << "property float x" << std::endl;
+    ofs << "property float y" << std::endl;
+    ofs << "property float z" << std::endl;
+    ofs << "end_header" << std::endl;
+    ofs.close();
 
-	Application app;
+    std::stringstream ss;
+    for (int i = 0; i < width * height; i++)
+    {
+        if (isnan(point_cloud_data[i].xyz.x) || isnan(point_cloud_data[i].xyz.y) || isnan(point_cloud_data[i].xyz.z))
+        {
+            continue;
+        }
 
-	if (!app.on_init()) {
-		return 1;
-	}
+        ss << (float)point_cloud_data[i].xyz.x << " " << (float)point_cloud_data[i].xyz.y << " "
+            << (float)point_cloud_data[i].xyz.z << std::endl;
+    }
 
-	/*auto camera_state = app.get_camerastate();
-	Camera camera = new Camera(camera_state.get_camera_position(), glm::quat(glm::vec3(), )*/
+    std::ofstream ofs_text(file_name, std::ios::out | std::ios::app);
+    ofs_text.write(ss.str().c_str(), (std::streamsize)ss.str().length());
+}
 
-	while (app.is_running()) {
-		app.on_frame();
-	}
+int main(int argc, char** argv)
+{
+    int returnCode = 1;
+    k4a_device_t device = NULL;
+    const int32_t TIMEOUT_IN_MS = 1000;
+    k4a_capture_t capture = NULL;
+    std::string file_name;
+    uint32_t device_count = 0;
+    k4a_device_configuration_t config = K4A_DEVICE_CONFIG_INIT_DISABLE_ALL;
+    k4a_image_t depth_image = NULL;
+    k4a_image_t xy_table = NULL;
+    k4a_image_t point_cloud = NULL;
+    int point_count = 0;
 
-	app.on_finish();
+    if (argc != 2)
+    {
+        printf("fastpointcloud.exe <output file>\n");
+        returnCode = 2;
+        goto Exit;
+    }
 
-	return 0;
+    file_name = argv[1];
+
+    device_count = k4a_device_get_installed_count();
+
+    if (device_count == 0)
+    {
+        printf("No K4A devices found\n");
+        return 0;
+    }
+
+    if (K4A_RESULT_SUCCEEDED != k4a_device_open(K4A_DEVICE_DEFAULT, &device))
+    {
+        printf("Failed to open device\n");
+        goto Exit;
+    }
+
+    config.depth_mode = K4A_DEPTH_MODE_WFOV_2X2BINNED;
+    config.camera_fps = K4A_FRAMES_PER_SECOND_30;
+
+    k4a_calibration_t calibration;
+    if (K4A_RESULT_SUCCEEDED !=
+        k4a_device_get_calibration(device, config.depth_mode, config.color_resolution, &calibration))
+    {
+        printf("Failed to get calibration\n");
+        goto Exit;
+    }
+
+    k4a_image_create(K4A_IMAGE_FORMAT_CUSTOM,
+                     calibration.depth_camera_calibration.resolution_width,
+                     calibration.depth_camera_calibration.resolution_height,
+                     calibration.depth_camera_calibration.resolution_width * (int)sizeof(k4a_float2_t),
+                     &xy_table);
+
+    create_xy_table(&calibration, xy_table);
+
+    k4a_image_create(K4A_IMAGE_FORMAT_CUSTOM,
+                     calibration.depth_camera_calibration.resolution_width,
+                     calibration.depth_camera_calibration.resolution_height,
+                     calibration.depth_camera_calibration.resolution_width * (int)sizeof(k4a_float3_t),
+                     &point_cloud);
+
+    if (K4A_RESULT_SUCCEEDED != k4a_device_start_cameras(device, &config))
+    {
+        printf("Failed to start cameras\n");
+        goto Exit;
+    }
+
+    // Get a capture
+    switch (k4a_device_get_capture(device, &capture, TIMEOUT_IN_MS))
+    {
+        case K4A_WAIT_RESULT_SUCCEEDED:
+            break;
+        case K4A_WAIT_RESULT_TIMEOUT:
+            printf("Timed out waiting for a capture\n");
+            goto Exit;
+        case K4A_WAIT_RESULT_FAILED:
+            printf("Failed to read a capture\n");
+            goto Exit;
+    }
+
+    // Get a depth image
+    depth_image = k4a_capture_get_depth_image(capture);
+    if (depth_image == 0)
+    {
+        printf("Failed to get depth image from capture\n");
+        goto Exit;
+    }
+
+    generate_point_cloud(depth_image, xy_table, point_cloud, &point_count);
+
+    write_point_cloud(file_name.c_str(), point_cloud, point_count);
+
+    k4a_image_release(depth_image);
+    k4a_capture_release(capture);
+    k4a_image_release(xy_table);
+    k4a_image_release(point_cloud);
+
+    returnCode = 0;
+Exit:
+    if (device != NULL)
+    {
+        k4a_device_close(device);
+    }
+
+    return returnCode;
 }
