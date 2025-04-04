@@ -1,6 +1,7 @@
 #include "Application.h"
 #include "utils/glfw3webgpu.h"
 #include "ResourceManager.h"
+#include "CameraCaptureWindow.h"
 
 #include <iostream>
 #include <cassert>
@@ -15,6 +16,63 @@
 
 #define _USE_MATH_DEFINES
 #include <math.h>
+
+
+
+bool Application::init()
+{
+	on_init();
+
+	m_windows.clear();
+
+	auto camera_capture_window = std::make_shared<CameraCaptureWindow>(0);
+	m_windows[0] = camera_capture_window;
+	if (!camera_capture_window->on_init(&m_device))
+		return false;
+
+
+	// TODO: instanciate new windows and add them to m_windows with their m_id as key
+	
+	return true;
+}
+
+void Application::run()
+{
+	while (is_running()) {
+		on_frame();
+		for (auto& window : m_windows) {
+			window.second->begin_frame();
+
+			if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+			{
+				ImGui::UpdatePlatformWindows();
+				ImGui::RenderPlatformWindowsDefault();
+			}
+		}
+	}
+	finish();
+}
+
+void Application::finish()
+{
+	for (auto& window : m_windows) {
+		window.second->on_finish();
+	}
+	on_finish();
+}
+
+bool Application::is_running()
+{
+	if (glfwWindowShouldClose(m_window))
+		return false;
+
+	for (auto& window : m_windows) {
+		if (!window.second->is_running())
+			return false;
+	}
+
+	return true;
+}
 
 
 
@@ -142,10 +200,7 @@ void Application::on_finish()
 	terminate_window_and_device();
 }
 
-bool Application::is_running()
-{
-	return !glfwWindowShouldClose(m_window);
-}
+
 
 void Application::on_resize()
 {
@@ -747,6 +802,8 @@ bool Application::init_gui()
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	auto io = ImGui::GetIO();
+
+	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 
 	// set up font
 	/*io.Fonts->AddFontFromFileTTF(RESOURCE_DIR "/ProggyClean.ttf", 26);

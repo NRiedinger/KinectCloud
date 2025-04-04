@@ -8,6 +8,12 @@
 #include <glm/gtx/quaternion.hpp>
 
 #pragma once
+enum class LoggingSeverity {
+	Info,
+	Warning,
+	Error
+};
+
 struct Point3D {
 	std::array<float, 3> xyz;
 	std::array<uint8_t, 3> rgb;

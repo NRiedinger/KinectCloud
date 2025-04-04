@@ -29,6 +29,15 @@ set(SOURCES
 	src/Camera.h
 	src/Camera.cpp
 	
+	src/BaseWindow.h
+	src/BaseWindow.cpp
+	
+	src/CameraCaptureWindow.h
+	src/CameraCaptureWindow.cpp
+	
+	src/Texture.h
+	src/Texture.cpp
+	
 	src/Structs.h
 	src/Helpers.h
 	
@@ -54,6 +63,18 @@ target_compile_definitions(App PRIVATE GLM_FORCE_LEFT_HANDED)
 # Azure Kinect SDK
 target_include_directories(App PRIVATE "C:/Program Files/Azure Kinect SDK v1.4.2/sdk/include")
 target_link_directories(App PRIVATE "C:/Program Files/Azure Kinect SDK v1.4.2/sdk/windows-desktop/amd64/release/lib")
+set(AZURE_KINECT_DLL "C:/Program Files/Azure Kinect SDK v1.4.2/sdk/windows-desktop/amd64/release/bin/k4a.dll")
+set(DEPTHENGINE_DLL "C:/Program Files/Azure Kinect SDK v1.4.2/sdk/windows-desktop/amd64/release/bin/depthengine_2_0.dll")
+add_custom_command(TARGET App POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${AZURE_KINECT_DLL}"
+    "$<TARGET_FILE_DIR:App>"
+)
+add_custom_command(TARGET App POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${DEPTHENGINE_DLL}"
+    "$<TARGET_FILE_DIR:App>"
+)
 
 
 

@@ -1,6 +1,7 @@
 #include <GLFW/glfw3.h>
 #include <webgpu/webgpu.hpp>
 #include "Structs.h"
+#include "BaseWindow.h"
 
 #include <array>
 
@@ -12,10 +13,15 @@
 class Application
 {
 public:
+	bool init();
+	void run();
+	void finish();
+	bool is_running();
+
 	bool on_init();
 	void on_frame();
 	void on_finish();
-	bool is_running();
+	
 
 	// event handlers
 	void on_resize();
@@ -64,6 +70,8 @@ private:
 	void update_gui(wgpu::RenderPassEncoder renderPass);
 
 private:
+	std::unordered_map<uint32_t, std::shared_ptr<BaseWindow>> m_windows;
+
 	// window and deivce
 	GLFWwindow* m_window = nullptr;
 	wgpu::Instance m_instance = nullptr;

@@ -10,16 +10,16 @@
 #ifdef _MSC_VER
 #include <intrin.h>
 
-static inline uint32_t __builtin_clz(uint32_t value)
-{
-    unsigned long leading_zero = 0;
-    if (value == 0)
-    {
-        return 32;
-    }
-    _BitScanReverse(&leading_zero, value);
-    return 31 - leading_zero;
-}
+//static inline uint32_t __builtin_clz(uint32_t value)
+//{
+//    unsigned long leading_zero = 0;
+//    if (value == 0)
+//    {
+//        return 32;
+//    }
+//    _BitScanReverse(&leading_zero, value);
+//    return 31 - leading_zero;
+//}
 
 static inline uint16_t __builtin_clz(uint16_t value)
 {
