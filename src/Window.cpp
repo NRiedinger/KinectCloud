@@ -139,7 +139,7 @@ void Window::on_frame()
 	if (m_k4a_device.get_capture(&capture, std::chrono::milliseconds(0))) {
 		const k4a::image color_image = capture.get_color_image();
 	
-		// m_color_texture.update(reinterpret_cast<const BgraPixel*>(color_image.get_buffer()));
+		m_color_texture.update(reinterpret_cast<const BgraPixel*>(color_image.get_buffer()));
 	}
 
 	ImGui::Begin("Test");

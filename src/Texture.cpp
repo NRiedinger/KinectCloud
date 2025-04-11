@@ -6,18 +6,35 @@ Texture::Texture(wgpu::Device device, wgpu::Queue queue, int width, int height)
     m_device(device),
     m_queue(queue)
 {
-    wgpu::TextureDescriptor textureDesc = {};
-    textureDesc.usage = wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::TextureBinding;
-    textureDesc.dimension = wgpu::TextureDimension::_2D;
-    textureDesc.size.width = static_cast<uint32_t>(m_width);
-    textureDesc.size.height = static_cast<uint32_t>(m_height);
-    textureDesc.size.depthOrArrayLayers = 1;
-    textureDesc.format = wgpu::TextureFormat::BGRA8Unorm;
-    textureDesc.mipLevelCount = 1;
+    wgpu::TextureDescriptor texture_desc{};
+    texture_desc.nextInChain = NULL;
+    texture_desc.label = NULL;
+    texture_desc.usage = wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::TextureBinding;
+    texture_desc.dimension = wgpu::TextureDimension::_2D;
+    texture_desc.size.width = static_cast<uint32_t>(m_width);
+    texture_desc.size.height = static_cast<uint32_t>(m_height);
+    texture_desc.size.depthOrArrayLayers = 1;
+    texture_desc.format = wgpu::TextureFormat::BGRA8Unorm;
+    texture_desc.mipLevelCount = 1;
+    texture_desc.sampleCount = 1;
+    texture_desc.viewFormatCount = 0;
+    texture_desc.viewFormats = NULL;
 
-    m_texture = m_device.createTexture(textureDesc);
+    m_texture = m_device.createTexture(texture_desc);
     //m_texture_view = m_texture.createView();
-    m_texture_view = wgpuTextureCreateView(m_texture, (WGPUTextureViewDescriptor*)&textureDesc);
+
+    wgpu::TextureViewDescriptor view_desc{};
+    view_desc.nextInChain = NULL;
+    view_desc.label = NULL;
+    view_desc.format = wgpu::TextureFormat::BGRA8Unorm;
+    view_desc.dimension = wgpu::TextureViewDimension::_2D;
+    view_desc.baseMipLevel = 0;
+    view_desc.mipLevelCount = 1;
+    view_desc.baseArrayLayer = 0;
+    view_desc.arrayLayerCount = 1;
+    view_desc.aspect = wgpu::TextureAspect::All;
+
+    m_texture_view = wgpuTextureCreateView(m_texture, &view_desc);
 }
 
 Texture::Texture(Texture&& other) noexcept 
