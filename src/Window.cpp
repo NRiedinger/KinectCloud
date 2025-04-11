@@ -1,37 +1,31 @@
-#include "Application.h"
-#include "utils/glfw3webgpu.h"
-#include "ResourceManager.h"
-
-#include <iostream>
-#include <cassert>
-#include <vector>
-
-#include <glm/glm.hpp>
-#include <glm/ext.hpp>
+#include "Window.h"
+#include <format>
 
 #include <imgui.h>
 #include <backends/imgui_impl_wgpu.h>
 #include <backends/imgui_impl_glfw.h>
 
+#include <glm/glm.hpp>
+#include <glm/ext.hpp>
+
+#include "utils/glfw3webgpu.h"
+#include "ResourceManager.h"
+
 #define _USE_MATH_DEFINES
 #include <math.h>
 
 
-
-
-
-bool Application::on_init()
+Window::Window()
 {
-	if (!init_pointcloud())
-		return false;
+}
+
+bool Window::on_init()
+{
 
 	if (!init_window_and_device())
 		return false;
 
 	if (!init_swapchain())
-		return false;
-
-	if (!init_test())
 		return false;
 
 	if (!init_depthbuffer())
@@ -40,7 +34,7 @@ bool Application::on_init()
 	if (!init_renderpipeline())
 		return false;
 
-	if (!init_geometry())
+	if (!init_pointcloud())
 		return false;
 
 	if (!init_uniforms())
@@ -52,19 +46,37 @@ bool Application::on_init()
 	if (!init_gui())
 		return false;
 
+	if (!init_k4a())
+		return false;
+
 	return true;
 }
 
-void Application::on_frame()
-{	
+void Window::on_finish()
+{
+	terminate_gui();
+	terminate_bindgroup();
+	terminate_uniforms();
+	terminate_renderpipeline();
+	terminate_depthbuffer();
+	terminate_swapchain();
+	terminate_window_and_device();
+}
+
+
+void Window::on_frame()
+{
+	if (!m_window) {
+		throw std::exception("Attempted to use uninitialized window!");
+	}
+
 	glfwPollEvents();
 
 	wgpu::TextureView nextTexture = m_swapchain.getCurrentTextureView();
 	if (!nextTexture) {
-		std::cerr << "Cannot get next swap chain texture!" << std::endl;
+		log("Cannot get next swap chain texture!", LoggingSeverity::Error);
 		return;
 	}
-
 
 	wgpu::CommandEncoderDescriptor commandEncoderDesc{};
 	commandEncoderDesc.label = "command encoder";
@@ -74,7 +86,6 @@ void Application::on_frame()
 
 	wgpu::RenderPassColorAttachment renderPassColorAttachment{};
 	renderPassColorAttachment.view = nextTexture;
-	//renderPassColorAttachment.view = m_offscreen_texture_view;
 	renderPassColorAttachment.resolveTarget = nullptr;
 	renderPassColorAttachment.loadOp = wgpu::LoadOp::Clear;
 	renderPassColorAttachment.storeOp = wgpu::StoreOp::Store;
@@ -106,45 +117,52 @@ void Application::on_frame()
 	renderPass.setBindGroup(0, m_bindgroup, 0, nullptr);
 	renderPass.draw(m_vertexcount, 1, 0, 0);
 
-	// draw GUI
-	// start ImGui frame
+
+
+	// // start ImGui frame
 	ImGui_ImplWGPU_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
 
-	// build UI
-	// Build our UI
-	static float f = 0.0f;
-	static int counter = 0;
-	static bool show_demo_window = true;
-	static bool show_another_window = false;
-	static ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
-	ImGui::Begin("DepthSplat Debug Info");                                // Create a window called "Hello, world!" and append into it.
+
+	ImGui::Begin("CameraCaptureWindow");
 
 	ImGuiIO& io = ImGui::GetIO();
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
 
-	ImGui::Text("Camera angle: [%.3f, %.3f]", m_camerastate.angles.x, m_camerastate.angles.y);
-	auto quat = glm::quat(glm::vec3(m_camerastate.angles.x, m_camerastate.angles.y, 0.f));
-
-	auto other = glm::toMat3(quat) * glm::vec3(1.f);
-	ImGui::Text("Matrix: [%.3f, %.3f, %.3f]", other.x, other.y, other.z);
+	ImGui::End();
 
 
+
+	k4a::capture capture;
+	if (m_k4a_device.get_capture(&capture, std::chrono::milliseconds(0))) {
+		const k4a::image color_image = capture.get_color_image();
 	
-	ImGui::Image((ImTextureID)(intptr_t)m_offscreen_texture_view, ImVec2(1280, 720));
+		// m_color_texture.update(reinterpret_cast<const BgraPixel*>(color_image.get_buffer()));
+	}
+
+	ImGui::Begin("Test");
+
+	auto lmao = m_color_texture.view();
+	auto kek = (intptr_t)lmao;
+	auto lul = (ImTextureID)kek;
+
+	ImVec2 image_size(static_cast<float>(m_color_texture.width()), static_cast<float>(m_color_texture.height()));
+	ImGui::Image(lul, image_size);
 
 	ImGui::End();
+
+
 
 	// draw UI
 	ImGui::EndFrame();
 	ImGui::Render();
 	ImGui_ImplWGPU_RenderDrawData(ImGui::GetDrawData(), renderPass);
 
+
 	renderPass.end();
 	renderPass.release();
-
 
 	wgpu::CommandBufferDescriptor commandBufferDesc{};
 	commandBufferDesc.label = "command buffer";
@@ -159,26 +177,13 @@ void Application::on_frame()
 	m_device.tick();
 }
 
-void Application::on_finish()
-{
-	terminate_gui();
-	terminate_bindgroup();
-	terminate_uniforms();
-	terminate_renderpipeline();
-	terminate_depthbuffer();
-	terminate_test();
-	terminate_swapchain();
-	terminate_window_and_device();
-}
 
-bool Application::is_running()
+bool Window::is_running()
 {
 	return !glfwWindowShouldClose(m_window);
 }
 
-
-
-void Application::on_resize()
+void Window::on_resize()
 {
 	// terminate in reverse order
 	terminate_depthbuffer();
@@ -189,10 +194,10 @@ void Application::on_resize()
 	init_depthbuffer();
 }
 
-void Application::on_mousemove(double xPos, double yPos)
+void Window::on_mousemove(double x_pos, double y_pos)
 {
 	if (m_dragstate.active) {
-		glm::vec2 currentMouse = glm::vec2((float)xPos, (float)yPos);
+		glm::vec2 currentMouse = glm::vec2((float)x_pos, (float)y_pos);
 		glm::vec2 delta = (currentMouse - m_dragstate.startMouse) * m_dragstate.SENSITIVITY;
 		m_camerastate.angles = m_dragstate.startCameraState.angles + delta;
 
@@ -202,14 +207,13 @@ void Application::on_mousemove(double xPos, double yPos)
 	}
 }
 
-void Application::on_mousebutton(int button, int action, int mods)
+void Window::on_mousebutton(int button, int action, int mods)
 {
-	//ImGui::SetCurrentContext(m_context);
 	ImGuiIO& io = ImGui::GetIO();
 	if (io.WantCaptureMouse) {
 		return;
 	}
-	
+
 	if (button == GLFW_MOUSE_BUTTON_LEFT) {
 		switch (action) {
 			case GLFW_PRESS:
@@ -228,32 +232,20 @@ void Application::on_mousebutton(int button, int action, int mods)
 	}
 }
 
-void Application::on_scroll(double xOffset, double yOffset)
+void Window::on_scroll(double x_offset, double y_offset)
 {
-	//ImGui::SetCurrentContext(m_context);
 	ImGuiIO& io = ImGui::GetIO();
 	if (io.WantCaptureMouse) {
 		return;
 	}
-	
-	m_camerastate.zoom += m_dragstate.SCROLL_SENSITIVITY * static_cast<float>(yOffset);
+
+	m_camerastate.zoom += m_dragstate.SCROLL_SENSITIVITY * static_cast<float>(y_offset);
 	m_camerastate.zoom = glm::clamp(m_camerastate.zoom, -2.f, 2.f);
 	update_viewmatrix();
 }
 
-bool Application::init_pointcloud()
-{
-	/*if (!ResourceManager::readPoints3D(RESOURCE_DIR "/points3D.bin", m_points)) {
-		return false;
-	}
 
-	auto point = m_points.begin()->second;
-	std::cout << point.xyz.at(0) << " " << point.xyz.at(1) << " " << point.xyz.at(2) << std::endl;
-	*/
-	return true;
-}
-
-bool Application::init_window_and_device()
+bool Window::init_window_and_device()
 {
 	// create instance
 	wgpu::InstanceDescriptor instanceDesc{};
@@ -269,37 +261,37 @@ bool Application::init_window_and_device()
 
 	m_instance = wgpu::createInstance(instanceDesc);
 	if (!m_instance) {
-		std::cerr << "Could not initialize WebGPU!" << std::endl;
+		log("Could not initialize WebGPU!", LoggingSeverity::Error);
 		return false;
 	}
 
+
 	// init GLFW
 	if (!glfwInit()) {
-		std::cerr << "Could not initialize GLFW!" << std::endl;
+		log("Could not initialize GLFW!", LoggingSeverity::Error);
 		return false;
 	}
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-	m_window = glfwCreateWindow(WINDOW_W, WINDOW_H, WINDOW_TITLE, NULL, NULL);
+	m_window = glfwCreateWindow(m_window_width, m_window_height, m_window_title.c_str(), NULL, NULL);
 	if (!m_window) {
-		std::cerr << "Could not open window!" << std::endl;
+		log("Could not open window!", LoggingSeverity::Error);
 		return false;
 	}
-	//glfwMakeContextCurrent(m_window);
 
 	// create surface and adapter
-	std::cout << "Requesting adapter..." << std::endl;
+	log("Requesting adapter...");
 	m_surface = glfwCreateWindowWGPUSurface(m_instance, m_window);
 	if (!m_surface) {
-		std::cerr << "Could not create surface!" << std::endl;
+		log("Could not create surface!", LoggingSeverity::Error);
 		return false;
 	}
 	wgpu::RequestAdapterOptions adapterOpts{};
 	adapterOpts.compatibleSurface = m_surface;
 	wgpu::Adapter adapter = m_instance.requestAdapter(adapterOpts);
-	std::cout << "Got adapter: " << adapter << std::endl;
+	log(std::format("Got adapter: {}", (void*)adapter));
 
-	std::cout << "Requesting device..." << std::endl;
+	log("Requesting device...");
 	wgpu::SupportedLimits supportedLimits;
 	adapter.getLimits(&supportedLimits);
 	wgpu::RequiredLimits requiredLimits = wgpu::Default;
@@ -322,16 +314,16 @@ bool Application::init_window_and_device()
 
 	// create device
 	wgpu::DeviceDescriptor deviceDesc{};
-	deviceDesc.label = "my device";
+	deviceDesc.label = "device";
 	deviceDesc.requiredFeatureCount = 0;
 	deviceDesc.requiredLimits = &requiredLimits;
 	deviceDesc.defaultQueue.label = "default queue";
 	m_device = adapter.requestDevice(deviceDesc);
 	if (!m_device) {
-		std::cerr << "Could not request device!" << std::endl;
+		log("Could not request device!", LoggingSeverity::Error);
 		return false;
 	}
-	std::cout << "Got device: " << m_device << std::endl;
+	log(std::format("Got device: {}", (void*)m_device));
 
 	// error callback for more debug info
 	m_uncaptured_error_callback = m_device.setUncapturedErrorCallback([](wgpu::ErrorType type, char const* message) {
@@ -356,39 +348,39 @@ bool Application::init_window_and_device()
 	glfwSetWindowUserPointer(m_window, this);
 
 	glfwSetFramebufferSizeCallback(m_window, [](GLFWwindow* window, int, int) {
-		auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
+		auto that = reinterpret_cast<Window*>(glfwGetWindowUserPointer(window));
 		if (that) {
 			that->on_resize();
 		}
 	});
 
 	glfwSetCursorPosCallback(m_window, [](GLFWwindow* window, double xPos, double yPos) {
-		auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
+		auto that = reinterpret_cast<Window*>(glfwGetWindowUserPointer(window));
 		if (that) {
 			that->on_mousemove(xPos, yPos);
 		}
 	});
 
 	glfwSetMouseButtonCallback(m_window, [](GLFWwindow* window, int button, int action, int mods) {
-		auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
+		auto that = reinterpret_cast<Window*>(glfwGetWindowUserPointer(window));
 		if (that) {
 			that->on_mousebutton(button, action, mods);
 		}
 	});
 
 	glfwSetScrollCallback(m_window, [](GLFWwindow* window, double xOffset, double yOffset) {
-		auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
+		auto that = reinterpret_cast<Window*>(glfwGetWindowUserPointer(window));
 		if (that) {
 			that->on_scroll(xOffset, yOffset);
 		}
 	});
 
-	adapter.release();
-
+	adapter.release(); 
+	
 	return true;
 }
 
-void Application::terminate_window_and_device()
+void Window::terminate_window_and_device()
 {
 	m_queue.release();
 	m_device.release();
@@ -399,12 +391,12 @@ void Application::terminate_window_and_device()
 	glfwTerminate();
 }
 
-bool Application::init_swapchain()
+bool Window::init_swapchain()
 {
 	int width, height;
 	glfwGetFramebufferSize(m_window, &width, &height);
 
-	std::cout << "Creating swapchain..." << std::endl;
+	log("Creating swapchain...");
 	wgpu::SwapChainDescriptor swapChainDesc{};
 	swapChainDesc.width = static_cast<uint32_t>(width);
 	swapChainDesc.height = static_cast<uint32_t>(height);
@@ -414,60 +406,25 @@ bool Application::init_swapchain()
 	swapChainDesc.presentMode = wgpu::PresentMode::Mailbox;
 	m_swapchain = m_device.createSwapChain(m_surface, swapChainDesc);
 	if (!m_swapchain) {
-		std::cerr << "Could not create swapchain!" << std::endl;
+		log("Could not create swapchain!", LoggingSeverity::Error);
 		return false;
 	}
-	std::cout << "Swapchain: " << m_swapchain << std::endl;
+	log(std::format("Swapchain: {}", (void*)m_swapchain));
+	
 	return true;
 }
 
-void Application::terminate_swapchain()
+void Window::terminate_swapchain()
 {
 	m_swapchain.release();
 }
 
-bool Application::init_test()
-{
-	wgpu::TextureDescriptor texDesc {};
-	texDesc.nextInChain = NULL;
-	texDesc.label = NULL;
-	texDesc.usage = wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::TextureBinding;
-	texDesc.size = { 1280, 720, 1 };
-	texDesc.format = wgpu::TextureFormat::BGRA8Unorm;
-	texDesc.dimension = wgpu::TextureDimension::_2D;
-	texDesc.mipLevelCount = 1;
-	texDesc.sampleCount = 1;
-	texDesc.viewFormatCount = 0;
-	texDesc.viewFormats = NULL;
-
-	wgpu::Texture offscreenTexture = m_device.createTexture(texDesc);
-
-	wgpu::TextureViewDescriptor texViewDesc{};
-	texViewDesc.nextInChain = NULL;
-	texViewDesc.label = NULL;
-	texViewDesc.format = wgpu::TextureFormat::BGRA8Unorm;
-	texViewDesc.dimension = wgpu::TextureViewDimension::_2D;
-	texViewDesc.baseMipLevel = 0;
-	texViewDesc.mipLevelCount = 1;
-	texViewDesc.baseArrayLayer = 0;
-	texViewDesc.arrayLayerCount = 1;
-	texViewDesc.aspect = wgpu::TextureAspect::All;
-
-	m_offscreen_texture_view = offscreenTexture.createView();
-
-	return true;
-}
-
-void Application::terminate_test()
-{
-}
-
-bool Application::init_depthbuffer()
+bool Window::init_depthbuffer()
 {
 	int width, height;
 	glfwGetFramebufferSize(m_window, &width, &height);
 
-	std::cout << "Initializing depth buffer..." << std::endl;
+	log("Initializing depth buffer...");
 	wgpu::TextureDescriptor depthTextureDesc{};
 	depthTextureDesc.dimension = wgpu::TextureDimension::_2D;
 	depthTextureDesc.format = m_depthtexture_format;
@@ -479,10 +436,10 @@ bool Application::init_depthbuffer()
 	depthTextureDesc.viewFormats = (WGPUTextureFormat*)&m_depthtexture_format;
 	m_depthtexture = m_device.createTexture(depthTextureDesc);
 	if (!m_depthtexture) {
-		std::cerr << "Could not create depth texture!" << std::endl;
+		log("Could not create depth texture!", LoggingSeverity::Error);
 		return false;
 	}
-	std::cout << "Depth texture: " << m_depthtexture << std::endl;
+	log(std::format("Depth texture: {}", (void*)m_depthtexture));
 
 	wgpu::TextureViewDescriptor depthTextureViewDesc{};
 	depthTextureViewDesc.aspect = wgpu::TextureAspect::DepthOnly;
@@ -494,32 +451,32 @@ bool Application::init_depthbuffer()
 	depthTextureViewDesc.format = m_depthtexture_format;
 	m_depthtexture_view = m_depthtexture.createView(depthTextureViewDesc);
 	if (!m_depthtexture_view) {
-		std::cerr << "Could not create depth texture view!" << std::endl;
+		log("Could not create depth texture view!", LoggingSeverity::Error);
 		return false;
 	}
-	std::cout << "Depth texture view: " << m_depthtexture_view << std::endl;
+	log(std::format("Depth texture view: {}", (void*)m_depthtexture_view));
 
 	return true;
 }
 
-void Application::terminate_depthbuffer()
+void Window::terminate_depthbuffer()
 {
 	m_depthtexture_view.release();
 	m_depthtexture.destroy();
 	m_depthtexture.release();
 }
 
-bool Application::init_renderpipeline()
+bool Window::init_renderpipeline()
 {
-	std::cout << "Creating shader module..." << std::endl;
+	log("Creating shader module...");
 	m_rendershader_module = ResourceManager::load_shadermodule(RESOURCE_DIR "/shader.wgsl", m_device);
 	if (!m_rendershader_module) {
-		std::cerr << "Could not create render shader module!" << std::endl;
+		log("Could not create render shader module!", LoggingSeverity::Error);
 		return false;
 	}
-	std::cout << "Render shader module: " << m_rendershader_module << std::endl;
+	log(std::format("Render shader module: {}", (void*)m_rendershader_module));
 
-	std::cout << "Creating render pipeline..." << std::endl;
+	log("Creating render pipeline...");
 	wgpu::RenderPipelineDescriptor renderPipelineDesc{};
 
 	std::vector<wgpu::VertexAttribute> vertexAttribs(4);
@@ -591,14 +548,14 @@ bool Application::init_renderpipeline()
 	fragmentState.targets = &colorTarget;
 
 
-	//wgpu::DepthStencilState depthStencilState = wgpu::Default;
-	//depthStencilState.depthCompare = wgpu::CompareFunction::Less;
-	//depthStencilState.depthWriteEnabled = wgpu::OptionalBool::True;
-	//depthStencilState.format = m_depthtexture_format;
-	//depthStencilState.stencilReadMask = 0;
-	//depthStencilState.stencilWriteMask = 0;
+	wgpu::DepthStencilState depthStencilState = wgpu::Default;
+	depthStencilState.depthCompare = wgpu::CompareFunction::Less;
+	depthStencilState.depthWriteEnabled = wgpu::OptionalBool::True;
+	depthStencilState.format = m_depthtexture_format;
+	depthStencilState.stencilReadMask = 0;
+	depthStencilState.stencilWriteMask = 0;
 
-	//renderPipelineDesc.depthStencil = &depthStencilState;
+	renderPipelineDesc.depthStencil = &depthStencilState;
 
 	renderPipelineDesc.multisample.count = 1;
 	renderPipelineDesc.multisample.mask = ~0u;
@@ -617,7 +574,7 @@ bool Application::init_renderpipeline()
 	bindGroupLayoutDesc.entries = &bindGroupLayoutEntry;
 	m_bindgroup_layout = m_device.createBindGroupLayout(bindGroupLayoutDesc);
 	if (!m_bindgroup_layout) {
-		std::cerr << "Could not create bind group layout!" << std::endl;
+		log("Could not create bind group layout!", LoggingSeverity::Error);
 		return false;
 	}
 
@@ -629,41 +586,36 @@ bool Application::init_renderpipeline()
 
 	wgpu::PipelineLayout pipelineLayout = m_device.createPipelineLayout(renderPipelineLayoutDesc);
 	if (!pipelineLayout) {
-		std::cerr << "Could not create pipeline layout!" << std::endl;
+		log("Could not create pipeline layout!", LoggingSeverity::Error);
 		return false;
 	}
 	renderPipelineDesc.layout = pipelineLayout;
 
 	m_renderpipeline = m_device.createRenderPipeline(renderPipelineDesc);
 	if (!m_renderpipeline) {
-		std::cerr << "Could not create render pipeline!" << std::endl;
+		log("Could not create render pipeline!", LoggingSeverity::Error);
 		return false;
 	}
-	std::cout << "Render pipeline: " << m_renderpipeline << std::endl;
+	log(std::format("Render pipeline: {}", (void*)m_renderpipeline));
 
 	return true;
 }
 
-void Application::terminate_renderpipeline()
+void Window::terminate_renderpipeline()
 {
 	m_renderpipeline.release();
 	m_rendershader_module.release();
 	m_bindgroup_layout.release();
 }
 
-bool Application::init_geometry()
+bool Window::init_pointcloud()
 {
 	std::unordered_map<int64_t, Point3D> points;
 	if (!ResourceManager::read_points3d(RESOURCE_DIR "/points3D_garden.bin", points)) {
 		return false;
 	}
-
+	
 	std::vector<float> vertexData;
-
-	/*if (!ResourceManager::loadGeometry(RESOURCE_DIR "/quad.txt", vertexData)) {
-		std::cerr << "Could not load geometry!" << std::endl;
-		return false;
-	}*/
 
 	for (auto kv : points) {
 		auto point = kv.second;
@@ -692,7 +644,6 @@ bool Application::init_geometry()
 		vertexData.push_back(0);
 	}
 
-
 	m_vertexcount = static_cast<int>(vertexData.size() / (sizeof(VertexAttributes) / sizeof(float)));
 
 	wgpu::BufferDescriptor bufferDesc{};
@@ -702,25 +653,25 @@ bool Application::init_geometry()
 
 	m_vertexbuffer = m_device.createBuffer(bufferDesc);
 	if (!m_vertexbuffer) {
-		std::cerr << "Could not create vertex buffer!" << std::endl;
+		log("Could not create vertex buffer!", LoggingSeverity::Error);
 		return false;
 	}
 	m_queue.writeBuffer(m_vertexbuffer, 0, vertexData.data(), bufferDesc.size);
 
-	std::cout << "Vertex buffer: " << m_vertexbuffer << std::endl;
-	std::cout << "Vertex count: " << m_vertexcount << std::endl;
+	log(std::format("Vertex buffer: {}", (void*)m_vertexbuffer));
+	log(std::format("Vertex count: {}", m_vertexcount));
 
 	return true;
 }
 
-void Application::terminate_geometry()
+void Window::terminate_pointcloud()
 {
 	m_vertexbuffer.destroy();
 	m_vertexbuffer.release();
 	m_vertexcount = 0;
 }
 
-bool Application::init_uniforms()
+bool Window::init_uniforms()
 {
 	wgpu::BufferDescriptor bufferDesc{};
 	bufferDesc.size = sizeof(Uniforms::RenderUniforms);
@@ -735,7 +686,7 @@ bool Application::init_uniforms()
 	// initial uniform values
 	m_renderuniforms.modelMatrix = glm::scale(glm::mat4(1.0), glm::vec3(0.1));
 	m_renderuniforms.viewMatrix = glm::lookAt(glm::vec3(-5.f, -5.f, 3.f), glm::vec3(0.0f), glm::vec3(0, 0, 1));
-	m_renderuniforms.projectionMatrix = glm::perspective((float)(45 * M_PI / 180), (float)(WINDOW_W / WINDOW_H), 0.01f, 100.0f);
+	m_renderuniforms.projectionMatrix = glm::perspective((float)(45 * M_PI / 180), (float)(m_window_width / m_window_height), 0.01f, 100.0f);
 	m_queue.writeBuffer(m_renderuniform_buffer, 0, &m_renderuniforms, sizeof(Uniforms::RenderUniforms));
 
 	update_viewmatrix();
@@ -743,13 +694,13 @@ bool Application::init_uniforms()
 	return true;
 }
 
-void Application::terminate_uniforms()
+void Window::terminate_uniforms()
 {
 	m_renderuniform_buffer.destroy();
 	m_renderuniform_buffer.release();
 }
 
-bool Application::init_bindgroup()
+bool Window::init_bindgroup()
 {
 	wgpu::BindGroupEntry binding;
 	binding.binding = 0;
@@ -770,64 +721,19 @@ bool Application::init_bindgroup()
 	return true;
 }
 
-void Application::terminate_bindgroup()
+void Window::terminate_bindgroup()
 {
 	m_bindgroup.release();
 }
 
-void Application::update_projectionmatrix()
+bool Window::init_gui()
 {
-	int width, height;
-	glfwGetFramebufferSize(m_window, &width, &height);
-
-	float ratio = width / (float)height;
-	m_renderuniforms.projectionMatrix = glm::perspective((float)(45 * M_PI / 180), ratio, .01f, 100.f);
-	m_queue.writeBuffer(m_renderuniform_buffer, offsetof(Uniforms::RenderUniforms, projectionMatrix), &m_renderuniforms.projectionMatrix, sizeof(Uniforms::RenderUniforms::projectionMatrix));
-}
-
-void Application::update_viewmatrix()
-{
-	glm::vec3 position = m_camerastate.get_camera_position();
-	m_renderuniforms.viewMatrix = glm::lookAt(position, glm::vec3(0.f), glm::vec3(0, 0, 1));
-	m_queue.writeBuffer(m_renderuniform_buffer, offsetof(Uniforms::RenderUniforms, viewMatrix), &m_renderuniforms.viewMatrix, sizeof(Uniforms::RenderUniforms::viewMatrix));
-}
-
-void Application::update_draginertia()
-{
-	constexpr float eps = 1e-4f;
-
-	if (!m_dragstate.active) {
-		if (std::abs(m_dragstate.velocity.x) < eps && std::abs(m_dragstate.velocity.y) < eps) {
-			return;
-		}
-
-		m_camerastate.angles += m_dragstate.velocity;
-		m_camerastate.angles.y = glm::clamp(m_camerastate.angles.y, -(float)M_PI / 2 + 1e-5f, (float)M_PI / 2 - 1e-5f);
-
-		m_dragstate.velocity *= m_dragstate.INERTIA;
-		update_viewmatrix();
-	}
-}
-
-bool Application::init_gui()
-{
-
-	// set up Dear ImGui context
 	IMGUI_CHECKVERSION();
-	/*m_context = */ImGui::CreateContext();
-	//glfwMakeContextCurrent(m_window);
-	//ImGui::SetCurrentContext(m_context);
+	ImGui::CreateContext();
 	auto io = ImGui::GetIO();
 
-	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
-
-	// set up font
-	/*io.Fonts->AddFontFromFileTTF(RESOURCE_DIR "/ProggyClean.ttf", 26);
-	ImGui::GetStyle().ScaleAllSizes(2.f);*/
-
-	// set up platform/renderer backends
 	if (!ImGui_ImplGlfw_InitForOther(m_window, true)) {
-		std::cerr << "Cannot initialize Dear ImGui for GLFW!" << std::endl;
+		log("Cannot initialize Dear ImGui for GLFW!", LoggingSeverity::Error);
 		return false;
 	}
 
@@ -837,25 +743,88 @@ bool Application::init_gui()
 	initInfo.DepthStencilFormat = m_depthtexture_format;
 	initInfo.NumFramesInFlight = 3;
 	if (!ImGui_ImplWGPU_Init(&initInfo)) {
-		std::cerr << "Cannot initialize Dear ImGui for WebGPU!" << std::endl;
+		log("Cannot initialize Dear ImGui for WebGPU!", LoggingSeverity::Error);
 		return false;
 	}
 
-
+	
 	return true;
 }
 
-void Application::terminate_gui()
+
+void Window::terminate_gui()
 {
 	ImGui_ImplGlfw_Shutdown();
 	ImGui_ImplWGPU_Shutdown();
 }
 
-void Application::update_gui(wgpu::RenderPassEncoder renderPass)
+bool Window::init_k4a()
 {
+	const uint32_t device_count = k4a::device::get_installed_count();
+	if (device_count == 0)
+	{
+		throw std::runtime_error("No Azure Kinect devices detected!");
+	}
+
+	k4a_device_configuration_t config = K4A_DEVICE_CONFIG_INIT_DISABLE_ALL;
+	config.camera_fps = K4A_FRAMES_PER_SECOND_30;
+	config.depth_mode = K4A_DEPTH_MODE_WFOV_2X2BINNED;
+	config.color_format = K4A_IMAGE_FORMAT_COLOR_BGRA32;
+	config.color_resolution = K4A_COLOR_RESOLUTION_720P;
+	config.synchronized_images_only = true;
+
+	log("Started opening k4a device...");
+
+	m_k4a_device = k4a::device::open(K4A_DEVICE_DEFAULT);
+	m_k4a_device.start_cameras(&config);
+
+	log("Finished opening k4a device.");
 	
+	m_color_texture = Texture(m_device, m_queue, 1280, 720);
+	
+	return true;
+}
+
+void Window::terminate_k4a()
+{
+}
+
+
+void Window::update_projectionmatrix()
+{
+	int width, height;
+	glfwGetFramebufferSize(m_window, &width, &height);
+
+	float ratio = width / (float)height;
+	m_renderuniforms.projectionMatrix = glm::perspective((float)(45 * M_PI / 180), ratio, .01f, 100.f);
+	m_queue.writeBuffer(m_renderuniform_buffer, offsetof(Uniforms::RenderUniforms, projectionMatrix), &m_renderuniforms.projectionMatrix, sizeof(Uniforms::RenderUniforms::projectionMatrix));
+}
+
+void Window::update_viewmatrix()
+{
+	glm::vec3 position = m_camerastate.get_camera_position();
+	m_renderuniforms.viewMatrix = glm::lookAt(position, glm::vec3(0.f), glm::vec3(0, 0, 1));
+	m_queue.writeBuffer(m_renderuniform_buffer, offsetof(Uniforms::RenderUniforms, viewMatrix), &m_renderuniforms.viewMatrix, sizeof(Uniforms::RenderUniforms::viewMatrix));
 }
 
 
 
-
+void Window::log(std::string message, LoggingSeverity severity)
+{
+	if (!m_logging_enabled)
+		return;
+	
+	switch (severity) {
+		case LoggingSeverity::Info:
+			std::cout << ">> " << message << std::endl;
+			break;
+		case LoggingSeverity::Warning:
+			std::cout << ">> [WARNING]: " << message << std::endl;
+			break;
+		case LoggingSeverity::Error:
+			std::cerr << ">> [ERROR]: " << message << std::endl;
+			break;
+		default:
+			break;
+	}
+}

@@ -1,7 +1,6 @@
-#include "Application.h"
+#include "Window.h"
 #include "ResourceManager.h"
 #include "GaussianModel.h"
-#include "CameraCaptureWindow.h"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -14,13 +13,27 @@
 
 int main(int, char**) {
 
-	Application app;
+	/*Application app;
 
-	if (!app.init()) {
+	if (!app.on_init()) {
 		return 1;
 	}
 
-	app.run();
+	while (app.is_running()) {
+		app.on_frame();
+	}
+
+	app.on_finish();*/
+
+	Window window;
+	if (!window.on_init())
+		return 1;
+
+	while (window.is_running()) {
+		window.on_frame();
+	}
+
+	window.on_finish();
 
 	/*Camera cam;
 	cam.capture_point_cloud();*/

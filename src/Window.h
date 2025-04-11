@@ -2,7 +2,10 @@
 #include <webgpu/webgpu.hpp>
 #include <string>
 
+#include <imgui.h>
+
 #include "Structs.h"
+#include "Texture.h"
 
 #define DEFAULT_WINDOW_W 1920
 #define DEFAULT_WINDOW_H 1080
@@ -12,19 +15,15 @@
 
 
 #pragma once
-class BaseWindow
+class Window
 {
 public:
-	BaseWindow(uint32_t id);
-	virtual ~BaseWindow() = default;
-	bool on_init(wgpu::Device* device);
+	Window();
+	bool on_init();
 	void on_finish();
-	void begin_frame();
+	void on_frame();
 	bool is_running();
 
-	// virtual functions
-	virtual void on_frame(wgpu::RenderPassEncoder render_pass) = 0;
-	virtual void update_gui() = 0;
 
 	// event handlers
 	void on_resize();
@@ -32,13 +31,9 @@ public:
 	void on_mousebutton(int button, int action, int mods);
 	void on_scroll(double x_offset, double y_offset);
 
-	// getter/setter
-	uint32_t get_id() {
-		return m_id;
-	}
 
 private:
-	bool init_window_and_device(wgpu::Device* device);
+	bool init_window_and_device();
 	void terminate_window_and_device();
 
 	bool init_swapchain();
@@ -47,13 +42,33 @@ private:
 	bool init_depthbuffer();
 	void terminate_depthbuffer();
 
-	/*bool init_gui();
-	void terminate_gui();*/
+	bool init_renderpipeline();
+	void terminate_renderpipeline();
+
+	bool init_pointcloud();
+	void terminate_pointcloud();
+
+	bool init_uniforms();
+	void terminate_uniforms();
+
+	bool init_bindgroup();
+	void terminate_bindgroup();
+
+	bool init_gui();
+	void terminate_gui();
+
+
+	bool init_k4a();
+	void terminate_k4a();
+
+
+	
+	void update_projectionmatrix();
+	void update_viewmatrix();
 
 	void log(std::string message, LoggingSeverity severity = LoggingSeverity::Info);
 
 private:
-	uint32_t m_id = -1;
 	std::string m_window_title = DEFAULT_WINDOW_TITLE;
 	int m_window_width = DEFAULT_WINDOW_W;
 	int m_window_height = DEFAULT_WINDOW_H;
@@ -75,5 +90,27 @@ private:
 	wgpu::TextureFormat m_depthtexture_format = wgpu::TextureFormat::Depth24Plus;
 	wgpu::Texture m_depthtexture = nullptr;
 	wgpu::TextureView m_depthtexture_view = nullptr;
+
+	// render pipeline
+	wgpu::BindGroupLayout m_bindgroup_layout = nullptr;
+	wgpu::ShaderModule m_rendershader_module = nullptr;
+	wgpu::RenderPipeline m_renderpipeline = nullptr;
+
+	// geometry
+	wgpu::Buffer m_vertexbuffer = nullptr;
+	int m_vertexcount = 0;
+
+	// render uniforms
+	Uniforms::RenderUniforms m_renderuniforms;
+	wgpu::Buffer m_renderuniform_buffer;
+
+	// bind group
+	wgpu::BindGroup m_bindgroup = nullptr;
+
+	CameraState m_camerastate;
+	DragState m_dragstate;
+
+	Texture m_color_texture;
+	k4a::device m_k4a_device;
 };
 

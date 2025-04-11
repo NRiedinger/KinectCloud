@@ -14,6 +14,10 @@ enum class LoggingSeverity {
 	Error
 };
 
+struct BgraPixel {
+	uint8_t b, g, r, a;
+};
+
 struct Point3D {
 	std::array<float, 3> xyz;
 	std::array<uint8_t, 3> rgb;

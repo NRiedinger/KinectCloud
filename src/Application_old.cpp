@@ -1,6 +1,7 @@
 #include "Application.h"
 #include "utils/glfw3webgpu.h"
 #include "ResourceManager.h"
+#include "CameraCaptureWindow.h"
 
 #include <iostream>
 #include <cassert>
