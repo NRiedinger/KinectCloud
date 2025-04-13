@@ -14,6 +14,12 @@ enum class LoggingSeverity {
 	Error
 };
 
+enum class AppState {
+	Default,
+	Capture,
+	Pointcloud
+};
+
 struct BgraPixel {
 	uint8_t b, g, r, a;
 };

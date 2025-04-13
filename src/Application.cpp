@@ -1,37 +1,31 @@
 #include "Application.h"
-#include "utils/glfw3webgpu.h"
-#include "ResourceManager.h"
-
-#include <iostream>
-#include <cassert>
-#include <vector>
-
-#include <glm/glm.hpp>
-#include <glm/ext.hpp>
+#include <format>
 
 #include <imgui.h>
 #include <backends/imgui_impl_wgpu.h>
 #include <backends/imgui_impl_glfw.h>
 
+#include <glm/glm.hpp>
+#include <glm/ext.hpp>
+
+#include "utils/glfw3webgpu.h"
+#include "ResourceManager.h"
+
 #define _USE_MATH_DEFINES
 #include <math.h>
 
 
-
-
+Application::Application()
+{
+}
 
 bool Application::on_init()
 {
-	if (!init_pointcloud())
-		return false;
 
 	if (!init_window_and_device())
 		return false;
 
 	if (!init_swapchain())
-		return false;
-
-	if (!init_test())
 		return false;
 
 	if (!init_depthbuffer())
@@ -40,7 +34,7 @@ bool Application::on_init()
 	if (!init_renderpipeline())
 		return false;
 
-	if (!init_geometry())
+	if (!init_pointcloud())
 		return false;
 
 	if (!init_uniforms())
@@ -52,111 +46,10 @@ bool Application::on_init()
 	if (!init_gui())
 		return false;
 
+	if (!init_k4a())
+		return false;
+
 	return true;
-}
-
-void Application::on_frame()
-{	
-	glfwPollEvents();
-
-	wgpu::TextureView nextTexture = m_swapchain.getCurrentTextureView();
-	if (!nextTexture) {
-		std::cerr << "Cannot get next swap chain texture!" << std::endl;
-		return;
-	}
-
-
-	wgpu::CommandEncoderDescriptor commandEncoderDesc{};
-	commandEncoderDesc.label = "command encoder";
-	wgpu::CommandEncoder encoder = m_device.createCommandEncoder(commandEncoderDesc);
-
-	wgpu::RenderPassDescriptor renderPassDesc{};
-
-	wgpu::RenderPassColorAttachment renderPassColorAttachment{};
-	renderPassColorAttachment.view = nextTexture;
-	//renderPassColorAttachment.view = m_offscreen_texture_view;
-	renderPassColorAttachment.resolveTarget = nullptr;
-	renderPassColorAttachment.loadOp = wgpu::LoadOp::Clear;
-	renderPassColorAttachment.storeOp = wgpu::StoreOp::Store;
-	renderPassColorAttachment.clearValue = wgpu::Color{ .05, .05, .05, 1.0 };
-	renderPassColorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
-
-	renderPassDesc.colorAttachmentCount = 1;
-	renderPassDesc.colorAttachments = &renderPassColorAttachment;
-
-	wgpu::RenderPassDepthStencilAttachment depthStencilAttachment{};
-	depthStencilAttachment.view = m_depthtexture_view;
-	depthStencilAttachment.depthClearValue = 1.f;
-	depthStencilAttachment.depthLoadOp = wgpu::LoadOp::Clear;
-	depthStencilAttachment.depthStoreOp = wgpu::StoreOp::Store;
-	depthStencilAttachment.depthReadOnly = false;
-	depthStencilAttachment.stencilClearValue = 0;
-	depthStencilAttachment.stencilLoadOp = wgpu::LoadOp::Undefined;
-	depthStencilAttachment.stencilStoreOp = wgpu::StoreOp::Undefined;
-	depthStencilAttachment.stencilReadOnly = true;
-
-	renderPassDesc.depthStencilAttachment = &depthStencilAttachment;
-
-	renderPassDesc.timestampWrites = nullptr;
-
-	wgpu::RenderPassEncoder renderPass = encoder.beginRenderPass(renderPassDesc);
-
-	renderPass.setPipeline(m_renderpipeline);
-	renderPass.setVertexBuffer(0, m_vertexbuffer, 0, m_vertexbuffer.getSize()/*m_vertexCount * sizeof(VertexAttributes)*/);
-	renderPass.setBindGroup(0, m_bindgroup, 0, nullptr);
-	renderPass.draw(m_vertexcount, 1, 0, 0);
-
-	// draw GUI
-	// start ImGui frame
-	ImGui_ImplWGPU_NewFrame();
-	ImGui_ImplGlfw_NewFrame();
-	ImGui::NewFrame();
-
-	// build UI
-	// Build our UI
-	static float f = 0.0f;
-	static int counter = 0;
-	static bool show_demo_window = true;
-	static bool show_another_window = false;
-	static ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-
-	ImGui::Begin("DepthSplat Debug Info");                                // Create a window called "Hello, world!" and append into it.
-
-	ImGuiIO& io = ImGui::GetIO();
-	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
-
-	ImGui::Text("Camera angle: [%.3f, %.3f]", m_camerastate.angles.x, m_camerastate.angles.y);
-	auto quat = glm::quat(glm::vec3(m_camerastate.angles.x, m_camerastate.angles.y, 0.f));
-
-	auto other = glm::toMat3(quat) * glm::vec3(1.f);
-	ImGui::Text("Matrix: [%.3f, %.3f, %.3f]", other.x, other.y, other.z);
-
-
-	
-	ImGui::Image((ImTextureID)(intptr_t)m_offscreen_texture_view, ImVec2(1280, 720));
-
-	ImGui::End();
-
-	// draw UI
-	ImGui::EndFrame();
-	ImGui::Render();
-	ImGui_ImplWGPU_RenderDrawData(ImGui::GetDrawData(), renderPass);
-
-	renderPass.end();
-	renderPass.release();
-
-
-	wgpu::CommandBufferDescriptor commandBufferDesc{};
-	commandBufferDesc.label = "command buffer";
-	wgpu::CommandBuffer command = encoder.finish(commandBufferDesc);
-
-	encoder.release();
-	m_queue.submit(command);
-
-	nextTexture.release();
-	m_swapchain.present();
-
-	m_device.tick();
 }
 
 void Application::on_finish()
@@ -166,20 +59,125 @@ void Application::on_finish()
 	terminate_uniforms();
 	terminate_renderpipeline();
 	terminate_depthbuffer();
-	terminate_test();
 	terminate_swapchain();
 	terminate_window_and_device();
 }
+
+
+void Application::on_frame()
+{
+	if (!m_window) {
+		throw std::exception("Attempted to use uninitialized window!");
+	}
+
+	glfwPollEvents();
+
+	// check if window is not minimized
+	if (m_window_width < 1 || m_window_height < 1)
+		return;
+
+	wgpu::TextureView next_texture = m_swapchain.getCurrentTextureView();
+	if (!next_texture) {
+		log("Cannot get next swap chain texture!", LoggingSeverity::Error);
+		return;
+	}
+
+	wgpu::CommandEncoderDescriptor command_encoder_desc{};
+	command_encoder_desc.label = "command encoder";
+	wgpu::CommandEncoder encoder = m_device.createCommandEncoder(command_encoder_desc);
+
+	wgpu::RenderPassDescriptor renderpass_desc{};
+
+	wgpu::RenderPassColorAttachment renderpass_color_attachment{};
+	renderpass_color_attachment.view = next_texture;
+	renderpass_color_attachment.resolveTarget = nullptr;
+	renderpass_color_attachment.loadOp = wgpu::LoadOp::Clear;
+	renderpass_color_attachment.storeOp = wgpu::StoreOp::Store;
+	renderpass_color_attachment.clearValue = wgpu::Color{ .05, .05, .05, 1.0 };
+	renderpass_color_attachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
+
+	renderpass_desc.colorAttachmentCount = 1;
+	renderpass_desc.colorAttachments = &renderpass_color_attachment;
+
+	wgpu::RenderPassDepthStencilAttachment depthstencil_attachment{};
+	depthstencil_attachment.view = m_depthtexture_view;
+	depthstencil_attachment.depthClearValue = 1.f;
+	depthstencil_attachment.depthLoadOp = wgpu::LoadOp::Clear;
+	depthstencil_attachment.depthStoreOp = wgpu::StoreOp::Store;
+	depthstencil_attachment.depthReadOnly = false;
+	depthstencil_attachment.stencilClearValue = 0;
+	depthstencil_attachment.stencilLoadOp = wgpu::LoadOp::Undefined;
+	depthstencil_attachment.stencilStoreOp = wgpu::StoreOp::Undefined;
+	depthstencil_attachment.stencilReadOnly = true;
+
+	renderpass_desc.depthStencilAttachment = &depthstencil_attachment;
+
+	renderpass_desc.timestampWrites = nullptr;
+
+	wgpu::RenderPassEncoder renderpass = encoder.beginRenderPass(renderpass_desc);
+
+
+	// // start ImGui frame
+	ImGui_ImplWGPU_NewFrame();
+	ImGui_ImplGlfw_NewFrame();
+	ImGui::NewFrame();
+
+
+	render_menu();
+
+
+	switch (m_app_state) {
+		case AppState::Capture:
+			render_state_capture();
+			break;
+		case AppState::Pointcloud:
+			render_state_pointcloud(renderpass);
+			break;
+		case AppState::Default:
+		default:
+			render_state_default();
+			break;
+	}
+
+
+
+	// draw UI
+	ImGui::EndFrame();
+	ImGui::Render();
+	ImGui_ImplWGPU_RenderDrawData(ImGui::GetDrawData(), renderpass);
+
+
+
+
+	renderpass.end();
+	renderpass.release();
+
+	wgpu::CommandBufferDescriptor commandbuffer_desc{};
+	commandbuffer_desc.label = "command buffer";
+	wgpu::CommandBuffer command = encoder.finish(commandbuffer_desc);
+
+	encoder.release();
+	m_queue.submit(command);
+
+	next_texture.release();
+	m_swapchain.present();
+
+	m_device.tick();
+}
+
 
 bool Application::is_running()
 {
 	return !glfwWindowShouldClose(m_window);
 }
 
-
-
 void Application::on_resize()
 {
+	glfwGetFramebufferSize(m_window, &m_window_width, &m_window_height);
+
+	if (m_window_width < 1 || m_window_height < 1)
+		return;
+	
 	// terminate in reverse order
 	terminate_depthbuffer();
 	terminate_swapchain();
@@ -189,10 +187,10 @@ void Application::on_resize()
 	init_depthbuffer();
 }
 
-void Application::on_mousemove(double xPos, double yPos)
+void Application::on_mousemove(double x_pos, double y_pos)
 {
 	if (m_dragstate.active) {
-		glm::vec2 currentMouse = glm::vec2((float)xPos, (float)yPos);
+		glm::vec2 currentMouse = glm::vec2((float)x_pos, (float)y_pos);
 		glm::vec2 delta = (currentMouse - m_dragstate.startMouse) * m_dragstate.SENSITIVITY;
 		m_camerastate.angles = m_dragstate.startCameraState.angles + delta;
 
@@ -204,12 +202,11 @@ void Application::on_mousemove(double xPos, double yPos)
 
 void Application::on_mousebutton(int button, int action, int mods)
 {
-	//ImGui::SetCurrentContext(m_context);
 	ImGuiIO& io = ImGui::GetIO();
 	if (io.WantCaptureMouse) {
 		return;
 	}
-	
+
 	if (button == GLFW_MOUSE_BUTTON_LEFT) {
 		switch (action) {
 			case GLFW_PRESS:
@@ -228,110 +225,98 @@ void Application::on_mousebutton(int button, int action, int mods)
 	}
 }
 
-void Application::on_scroll(double xOffset, double yOffset)
+void Application::on_scroll(double x_offset, double y_offset)
 {
-	//ImGui::SetCurrentContext(m_context);
 	ImGuiIO& io = ImGui::GetIO();
 	if (io.WantCaptureMouse) {
 		return;
 	}
-	
-	m_camerastate.zoom += m_dragstate.SCROLL_SENSITIVITY * static_cast<float>(yOffset);
+
+	m_camerastate.zoom += m_dragstate.SCROLL_SENSITIVITY * static_cast<float>(y_offset);
 	m_camerastate.zoom = glm::clamp(m_camerastate.zoom, -2.f, 2.f);
 	update_viewmatrix();
 }
 
-bool Application::init_pointcloud()
-{
-	/*if (!ResourceManager::readPoints3D(RESOURCE_DIR "/points3D.bin", m_points)) {
-		return false;
-	}
-
-	auto point = m_points.begin()->second;
-	std::cout << point.xyz.at(0) << " " << point.xyz.at(1) << " " << point.xyz.at(2) << std::endl;
-	*/
-	return true;
-}
 
 bool Application::init_window_and_device()
 {
 	// create instance
-	wgpu::InstanceDescriptor instanceDesc{};
+	wgpu::InstanceDescriptor instance_desc{};
 
 	wgpu::DawnTogglesDescriptor toggles;
 	toggles.chain.next = nullptr;
 	toggles.chain.sType = wgpu::SType::DawnTogglesDescriptor;
 	toggles.disabledToggleCount = 0;
 	toggles.enabledToggleCount = 1;
-	const char* toggleName = "enable_immediate_error_handling";
-	toggles.enabledToggles = &toggleName;
-	instanceDesc.nextInChain = &toggles.chain;
+	const char* toggle_name = "enable_immediate_error_handling";
+	toggles.enabledToggles = &toggle_name;
+	instance_desc.nextInChain = &toggles.chain;
 
-	m_instance = wgpu::createInstance(instanceDesc);
+	m_instance = wgpu::createInstance(instance_desc);
 	if (!m_instance) {
-		std::cerr << "Could not initialize WebGPU!" << std::endl;
+		log("Could not initialize WebGPU!", LoggingSeverity::Error);
 		return false;
 	}
 
+
 	// init GLFW
 	if (!glfwInit()) {
-		std::cerr << "Could not initialize GLFW!" << std::endl;
+		log("Could not initialize GLFW!", LoggingSeverity::Error);
 		return false;
 	}
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-	m_window = glfwCreateWindow(WINDOW_W, WINDOW_H, WINDOW_TITLE, NULL, NULL);
+	m_window = glfwCreateWindow(m_window_width, m_window_height, m_window_title.c_str(), NULL, NULL);
 	if (!m_window) {
-		std::cerr << "Could not open window!" << std::endl;
+		log("Could not open window!", LoggingSeverity::Error);
 		return false;
 	}
-	//glfwMakeContextCurrent(m_window);
 
 	// create surface and adapter
-	std::cout << "Requesting adapter..." << std::endl;
+	log("Requesting adapter...");
 	m_surface = glfwCreateWindowWGPUSurface(m_instance, m_window);
 	if (!m_surface) {
-		std::cerr << "Could not create surface!" << std::endl;
+		log("Could not create surface!", LoggingSeverity::Error);
 		return false;
 	}
 	wgpu::RequestAdapterOptions adapterOpts{};
 	adapterOpts.compatibleSurface = m_surface;
 	wgpu::Adapter adapter = m_instance.requestAdapter(adapterOpts);
-	std::cout << "Got adapter: " << adapter << std::endl;
+	log(std::format("Got adapter: {}", (void*)adapter));
 
-	std::cout << "Requesting device..." << std::endl;
-	wgpu::SupportedLimits supportedLimits;
-	adapter.getLimits(&supportedLimits);
-	wgpu::RequiredLimits requiredLimits = wgpu::Default;
-	requiredLimits.limits.maxVertexAttributes = 4;
-	requiredLimits.limits.maxVertexBuffers = 1;
-	requiredLimits.limits.maxBufferSize = 150000 * sizeof(VertexAttributes);
-	requiredLimits.limits.maxVertexBufferArrayStride = sizeof(VertexAttributes);
-	requiredLimits.limits.minStorageBufferOffsetAlignment = supportedLimits.limits.minStorageBufferOffsetAlignment;
-	requiredLimits.limits.minUniformBufferOffsetAlignment = supportedLimits.limits.minUniformBufferOffsetAlignment;
-	requiredLimits.limits.maxInterStageShaderComponents = 8;
-	requiredLimits.limits.maxBindGroups = 2;
-	requiredLimits.limits.maxUniformBuffersPerShaderStage = 1;
-	requiredLimits.limits.maxUniformBufferBindingSize = 16 * 4 * sizeof(float);
+	log("Requesting device...");
+	wgpu::SupportedLimits supported_limits;
+	adapter.getLimits(&supported_limits);
+	wgpu::RequiredLimits required_limits = wgpu::Default;
+	required_limits.limits.maxVertexAttributes = 4;
+	required_limits.limits.maxVertexBuffers = 1;
+	required_limits.limits.maxBufferSize = 150000 * sizeof(VertexAttributes);
+	required_limits.limits.maxVertexBufferArrayStride = sizeof(VertexAttributes);
+	required_limits.limits.minStorageBufferOffsetAlignment = supported_limits.limits.minStorageBufferOffsetAlignment;
+	required_limits.limits.minUniformBufferOffsetAlignment = supported_limits.limits.minUniformBufferOffsetAlignment;
+	required_limits.limits.maxInterStageShaderComponents = 8;
+	required_limits.limits.maxBindGroups = 2;
+	required_limits.limits.maxUniformBuffersPerShaderStage = 1;
+	required_limits.limits.maxUniformBufferBindingSize = 16 * 4 * sizeof(float);
 	// Allow textures up to 2K
-	requiredLimits.limits.maxTextureDimension1D = 2048;
-	requiredLimits.limits.maxTextureDimension2D = 2048;
-	requiredLimits.limits.maxTextureArrayLayers = 1;
-	requiredLimits.limits.maxSampledTexturesPerShaderStage = 1;
-	requiredLimits.limits.maxSamplersPerShaderStage = 1;
+	required_limits.limits.maxTextureDimension1D = 2048;
+	required_limits.limits.maxTextureDimension2D = 2048;
+	required_limits.limits.maxTextureArrayLayers = 1;
+	required_limits.limits.maxSampledTexturesPerShaderStage = 1;
+	required_limits.limits.maxSamplersPerShaderStage = 1;
 
 	// create device
 	wgpu::DeviceDescriptor deviceDesc{};
-	deviceDesc.label = "my device";
+	deviceDesc.label = "device";
 	deviceDesc.requiredFeatureCount = 0;
-	deviceDesc.requiredLimits = &requiredLimits;
+	deviceDesc.requiredLimits = &required_limits;
 	deviceDesc.defaultQueue.label = "default queue";
 	m_device = adapter.requestDevice(deviceDesc);
 	if (!m_device) {
-		std::cerr << "Could not request device!" << std::endl;
+		log("Could not request device!", LoggingSeverity::Error);
 		return false;
 	}
-	std::cout << "Got device: " << m_device << std::endl;
+	log(std::format("Got device: {}", (void*)m_device));
 
 	// error callback for more debug info
 	m_uncaptured_error_callback = m_device.setUncapturedErrorCallback([](wgpu::ErrorType type, char const* message) {
@@ -355,17 +340,17 @@ bool Application::init_window_and_device()
 	// glfw window callbacks
 	glfwSetWindowUserPointer(m_window, this);
 
-	glfwSetFramebufferSizeCallback(m_window, [](GLFWwindow* window, int, int) {
+	glfwSetFramebufferSizeCallback(m_window, [](GLFWwindow* window, int w, int h) {
 		auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
 		if (that) {
 			that->on_resize();
 		}
 	});
 
-	glfwSetCursorPosCallback(m_window, [](GLFWwindow* window, double xPos, double yPos) {
+	glfwSetCursorPosCallback(m_window, [](GLFWwindow* window, double x_pos, double y_pos) {
 		auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
 		if (that) {
-			that->on_mousemove(xPos, yPos);
+			that->on_mousemove(x_pos, y_pos);
 		}
 	});
 
@@ -376,15 +361,15 @@ bool Application::init_window_and_device()
 		}
 	});
 
-	glfwSetScrollCallback(m_window, [](GLFWwindow* window, double xOffset, double yOffset) {
+	glfwSetScrollCallback(m_window, [](GLFWwindow* window, double x_offset, double y_offset) {
 		auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
 		if (that) {
-			that->on_scroll(xOffset, yOffset);
+			that->on_scroll(x_offset, y_offset);
 		}
 	});
 
-	adapter.release();
-
+	adapter.release(); 
+	
 	return true;
 }
 
@@ -401,23 +386,21 @@ void Application::terminate_window_and_device()
 
 bool Application::init_swapchain()
 {
-	int width, height;
-	glfwGetFramebufferSize(m_window, &width, &height);
-
-	std::cout << "Creating swapchain..." << std::endl;
-	wgpu::SwapChainDescriptor swapChainDesc{};
-	swapChainDesc.width = static_cast<uint32_t>(width);
-	swapChainDesc.height = static_cast<uint32_t>(height);
-	swapChainDesc.usage = wgpu::TextureUsage::RenderAttachment;
-	swapChainDesc.format = m_swapchain_format;
+	log("Creating swapchain...");
+	wgpu::SwapChainDescriptor swapchain_desc{};
+	swapchain_desc.width = static_cast<uint32_t>(m_window_width);
+	swapchain_desc.height = static_cast<uint32_t>(m_window_height);
+	swapchain_desc.usage = wgpu::TextureUsage::RenderAttachment;
+	swapchain_desc.format = m_swapchain_format;
 	//swapChainDesc.presentMode = wgpu::PresentMode::Fifo;
-	swapChainDesc.presentMode = wgpu::PresentMode::Mailbox;
-	m_swapchain = m_device.createSwapChain(m_surface, swapChainDesc);
+	swapchain_desc.presentMode = wgpu::PresentMode::Mailbox;
+	m_swapchain = m_device.createSwapChain(m_surface, swapchain_desc);
 	if (!m_swapchain) {
-		std::cerr << "Could not create swapchain!" << std::endl;
+		log("Could not create swapchain!", LoggingSeverity::Error);
 		return false;
 	}
-	std::cout << "Swapchain: " << m_swapchain << std::endl;
+	log(std::format("Swapchain: {}", (void*)m_swapchain));
+	
 	return true;
 }
 
@@ -426,78 +409,39 @@ void Application::terminate_swapchain()
 	m_swapchain.release();
 }
 
-bool Application::init_test()
-{
-	wgpu::TextureDescriptor texDesc {};
-	texDesc.nextInChain = NULL;
-	texDesc.label = NULL;
-	texDesc.usage = wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::TextureBinding;
-	texDesc.size = { 1280, 720, 1 };
-	texDesc.format = wgpu::TextureFormat::BGRA8Unorm;
-	texDesc.dimension = wgpu::TextureDimension::_2D;
-	texDesc.mipLevelCount = 1;
-	texDesc.sampleCount = 1;
-	texDesc.viewFormatCount = 0;
-	texDesc.viewFormats = NULL;
-
-	wgpu::Texture offscreenTexture = m_device.createTexture(texDesc);
-
-	wgpu::TextureViewDescriptor texViewDesc{};
-	texViewDesc.nextInChain = NULL;
-	texViewDesc.label = NULL;
-	texViewDesc.format = wgpu::TextureFormat::BGRA8Unorm;
-	texViewDesc.dimension = wgpu::TextureViewDimension::_2D;
-	texViewDesc.baseMipLevel = 0;
-	texViewDesc.mipLevelCount = 1;
-	texViewDesc.baseArrayLayer = 0;
-	texViewDesc.arrayLayerCount = 1;
-	texViewDesc.aspect = wgpu::TextureAspect::All;
-
-	m_offscreen_texture_view = offscreenTexture.createView();
-
-	return true;
-}
-
-void Application::terminate_test()
-{
-}
-
 bool Application::init_depthbuffer()
 {
-	int width, height;
-	glfwGetFramebufferSize(m_window, &width, &height);
-
-	std::cout << "Initializing depth buffer..." << std::endl;
-	wgpu::TextureDescriptor depthTextureDesc{};
-	depthTextureDesc.dimension = wgpu::TextureDimension::_2D;
-	depthTextureDesc.format = m_depthtexture_format;
-	depthTextureDesc.mipLevelCount = 1;
-	depthTextureDesc.sampleCount = 1;
-	depthTextureDesc.size = { static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1 };
-	depthTextureDesc.usage = wgpu::TextureUsage::RenderAttachment;
-	depthTextureDesc.viewFormatCount = 1;
-	depthTextureDesc.viewFormats = (WGPUTextureFormat*)&m_depthtexture_format;
-	m_depthtexture = m_device.createTexture(depthTextureDesc);
+	log("Initializing depth buffer...");
+	wgpu::TextureDescriptor depthtexture_desc{};
+	depthtexture_desc.dimension = wgpu::TextureDimension::_2D;
+	depthtexture_desc.format = m_depthtexture_format;
+	depthtexture_desc.mipLevelCount = 1;
+	depthtexture_desc.sampleCount = 1;
+	depthtexture_desc.size = { static_cast<uint32_t>(m_window_width), static_cast<uint32_t>(m_window_height), 1 };
+	depthtexture_desc.usage = wgpu::TextureUsage::RenderAttachment;
+	depthtexture_desc.viewFormatCount = 1;
+	depthtexture_desc.viewFormats = (WGPUTextureFormat*)&m_depthtexture_format;
+	m_depthtexture = m_device.createTexture(depthtexture_desc);
 	if (!m_depthtexture) {
-		std::cerr << "Could not create depth texture!" << std::endl;
+		log("Could not create depth texture!", LoggingSeverity::Error);
 		return false;
 	}
-	std::cout << "Depth texture: " << m_depthtexture << std::endl;
+	log(std::format("Depth texture: {}", (void*)m_depthtexture));
 
-	wgpu::TextureViewDescriptor depthTextureViewDesc{};
-	depthTextureViewDesc.aspect = wgpu::TextureAspect::DepthOnly;
-	depthTextureViewDesc.baseArrayLayer = 0;
-	depthTextureViewDesc.arrayLayerCount = 1;
-	depthTextureViewDesc.baseMipLevel = 0;
-	depthTextureViewDesc.mipLevelCount = 1;
-	depthTextureViewDesc.dimension = wgpu::TextureViewDimension::_2D;
-	depthTextureViewDesc.format = m_depthtexture_format;
-	m_depthtexture_view = m_depthtexture.createView(depthTextureViewDesc);
+	wgpu::TextureViewDescriptor depthtexture_view_desc{};
+	depthtexture_view_desc.aspect = wgpu::TextureAspect::DepthOnly;
+	depthtexture_view_desc.baseArrayLayer = 0;
+	depthtexture_view_desc.arrayLayerCount = 1;
+	depthtexture_view_desc.baseMipLevel = 0;
+	depthtexture_view_desc.mipLevelCount = 1;
+	depthtexture_view_desc.dimension = wgpu::TextureViewDimension::_2D;
+	depthtexture_view_desc.format = m_depthtexture_format;
+	m_depthtexture_view = m_depthtexture.createView(depthtexture_view_desc);
 	if (!m_depthtexture_view) {
-		std::cerr << "Could not create depth texture view!" << std::endl;
+		log("Could not create depth texture view!", LoggingSeverity::Error);
 		return false;
 	}
-	std::cout << "Depth texture view: " << m_depthtexture_view << std::endl;
+	log(std::format("Depth texture view: {}", (void*)m_depthtexture_view));
 
 	return true;
 }
@@ -511,135 +455,135 @@ void Application::terminate_depthbuffer()
 
 bool Application::init_renderpipeline()
 {
-	std::cout << "Creating shader module..." << std::endl;
+	log("Creating shader module...");
 	m_rendershader_module = ResourceManager::load_shadermodule(RESOURCE_DIR "/shader.wgsl", m_device);
 	if (!m_rendershader_module) {
-		std::cerr << "Could not create render shader module!" << std::endl;
+		log("Could not create render shader module!", LoggingSeverity::Error);
 		return false;
 	}
-	std::cout << "Render shader module: " << m_rendershader_module << std::endl;
+	log(std::format("Render shader module: {}", (void*)m_rendershader_module));
 
-	std::cout << "Creating render pipeline..." << std::endl;
-	wgpu::RenderPipelineDescriptor renderPipelineDesc{};
+	log("Creating render pipeline...");
+	wgpu::RenderPipelineDescriptor renderpipeline_desc{};
 
-	std::vector<wgpu::VertexAttribute> vertexAttribs(4);
+	std::vector<wgpu::VertexAttribute> vertex_attribs(4);
 
 	// position attribute
-	vertexAttribs[0].shaderLocation = 0;
-	vertexAttribs[0].format = wgpu::VertexFormat::Float32x3;
-	vertexAttribs[0].offset = 0;
+	vertex_attribs[0].shaderLocation = 0;
+	vertex_attribs[0].format = wgpu::VertexFormat::Float32x3;
+	vertex_attribs[0].offset = 0;
 
 	// normal attribute
-	vertexAttribs[1].shaderLocation = 1;
-	vertexAttribs[1].format = wgpu::VertexFormat::Float32x3;
-	vertexAttribs[1].offset = offsetof(VertexAttributes, normal);
+	vertex_attribs[1].shaderLocation = 1;
+	vertex_attribs[1].format = wgpu::VertexFormat::Float32x3;
+	vertex_attribs[1].offset = offsetof(VertexAttributes, normal);
 
 	// color attribute
-	vertexAttribs[2].shaderLocation = 2;
-	vertexAttribs[2].format = wgpu::VertexFormat::Float32x3;
-	vertexAttribs[2].offset = offsetof(VertexAttributes, color);
+	vertex_attribs[2].shaderLocation = 2;
+	vertex_attribs[2].format = wgpu::VertexFormat::Float32x3;
+	vertex_attribs[2].offset = offsetof(VertexAttributes, color);
 
 	// uv attribute
-	vertexAttribs[3].shaderLocation = 3;
-	vertexAttribs[3].format = wgpu::VertexFormat::Float32x2;
-	vertexAttribs[3].offset = offsetof(VertexAttributes, uv);
+	vertex_attribs[3].shaderLocation = 3;
+	vertex_attribs[3].format = wgpu::VertexFormat::Float32x2;
+	vertex_attribs[3].offset = offsetof(VertexAttributes, uv);
 
-	wgpu::VertexBufferLayout vertexBufferLayout;
-	vertexBufferLayout.attributeCount = (uint32_t)vertexAttribs.size();
-	vertexBufferLayout.attributes = vertexAttribs.data();
-	vertexBufferLayout.arrayStride = sizeof(VertexAttributes);
-	vertexBufferLayout.stepMode = wgpu::VertexStepMode::Vertex;
+	wgpu::VertexBufferLayout vertexbuffer_layout;
+	vertexbuffer_layout.attributeCount = (uint32_t)vertex_attribs.size();
+	vertexbuffer_layout.attributes = vertex_attribs.data();
+	vertexbuffer_layout.arrayStride = sizeof(VertexAttributes);
+	vertexbuffer_layout.stepMode = wgpu::VertexStepMode::Vertex;
 
 
-	renderPipelineDesc.vertex.bufferCount = 1;
-	renderPipelineDesc.vertex.buffers = &vertexBufferLayout;
+	renderpipeline_desc.vertex.bufferCount = 1;
+	renderpipeline_desc.vertex.buffers = &vertexbuffer_layout;
 
-	renderPipelineDesc.vertex.module = m_rendershader_module;
-	renderPipelineDesc.vertex.entryPoint = "vs_main";
-	renderPipelineDesc.vertex.constantCount = 0;
-	renderPipelineDesc.vertex.constants = nullptr;
+	renderpipeline_desc.vertex.module = m_rendershader_module;
+	renderpipeline_desc.vertex.entryPoint = "vs_main";
+	renderpipeline_desc.vertex.constantCount = 0;
+	renderpipeline_desc.vertex.constants = nullptr;
 
 
 	// renderPipelineDesc.primitive.topology = wgpu::PrimitiveTopology::TriangleList;
-	renderPipelineDesc.primitive.topology = wgpu::PrimitiveTopology::PointList;
-	renderPipelineDesc.primitive.stripIndexFormat = wgpu::IndexFormat::Undefined;
-	renderPipelineDesc.primitive.frontFace = wgpu::FrontFace::CCW;
-	renderPipelineDesc.primitive.cullMode = wgpu::CullMode::None;
+	renderpipeline_desc.primitive.topology = wgpu::PrimitiveTopology::PointList;
+	renderpipeline_desc.primitive.stripIndexFormat = wgpu::IndexFormat::Undefined;
+	renderpipeline_desc.primitive.frontFace = wgpu::FrontFace::CCW;
+	renderpipeline_desc.primitive.cullMode = wgpu::CullMode::None;
 
 
-	wgpu::FragmentState fragmentState{};
-	fragmentState.module = m_rendershader_module;
-	fragmentState.entryPoint = "fs_main";
-	fragmentState.constantCount = 0;
-	fragmentState.constants = nullptr;
-	renderPipelineDesc.fragment = &fragmentState;
+	wgpu::FragmentState fragment_state{};
+	fragment_state.module = m_rendershader_module;
+	fragment_state.entryPoint = "fs_main";
+	fragment_state.constantCount = 0;
+	fragment_state.constants = nullptr;
+	renderpipeline_desc.fragment = &fragment_state;
 
-	wgpu::BlendState blendState{};
-	blendState.color.srcFactor = wgpu::BlendFactor::SrcAlpha;
-	blendState.color.dstFactor = wgpu::BlendFactor::OneMinusSrcAlpha;
-	blendState.color.operation = wgpu::BlendOperation::Add;
-	blendState.alpha.srcFactor = wgpu::BlendFactor::Zero;
-	blendState.alpha.dstFactor = wgpu::BlendFactor::One;
-	blendState.alpha.operation = wgpu::BlendOperation::Add;
+	wgpu::BlendState blend_state{};
+	blend_state.color.srcFactor = wgpu::BlendFactor::SrcAlpha;
+	blend_state.color.dstFactor = wgpu::BlendFactor::OneMinusSrcAlpha;
+	blend_state.color.operation = wgpu::BlendOperation::Add;
+	blend_state.alpha.srcFactor = wgpu::BlendFactor::Zero;
+	blend_state.alpha.dstFactor = wgpu::BlendFactor::One;
+	blend_state.alpha.operation = wgpu::BlendOperation::Add;
 
-	wgpu::ColorTargetState colorTarget{};
-	colorTarget.format = m_swapchain_format;
-	colorTarget.blend = &blendState;
-	colorTarget.writeMask = wgpu::ColorWriteMask::All;
+	wgpu::ColorTargetState color_target{};
+	color_target.format = m_swapchain_format;
+	color_target.blend = &blend_state;
+	color_target.writeMask = wgpu::ColorWriteMask::All;
 
-	fragmentState.targetCount = 1;
-	fragmentState.targets = &colorTarget;
+	fragment_state.targetCount = 1;
+	fragment_state.targets = &color_target;
 
 
-	//wgpu::DepthStencilState depthStencilState = wgpu::Default;
-	//depthStencilState.depthCompare = wgpu::CompareFunction::Less;
-	//depthStencilState.depthWriteEnabled = wgpu::OptionalBool::True;
-	//depthStencilState.format = m_depthtexture_format;
-	//depthStencilState.stencilReadMask = 0;
-	//depthStencilState.stencilWriteMask = 0;
+	wgpu::DepthStencilState depthstencil_state = wgpu::Default;
+	depthstencil_state.depthCompare = wgpu::CompareFunction::Less;
+	depthstencil_state.depthWriteEnabled = wgpu::OptionalBool::True;
+	depthstencil_state.format = m_depthtexture_format;
+	depthstencil_state.stencilReadMask = 0;
+	depthstencil_state.stencilWriteMask = 0;
 
-	//renderPipelineDesc.depthStencil = &depthStencilState;
+	renderpipeline_desc.depthStencil = &depthstencil_state;
 
-	renderPipelineDesc.multisample.count = 1;
-	renderPipelineDesc.multisample.mask = ~0u;
-	renderPipelineDesc.multisample.alphaToCoverageEnabled = false;
+	renderpipeline_desc.multisample.count = 1;
+	renderpipeline_desc.multisample.mask = ~0u;
+	renderpipeline_desc.multisample.alphaToCoverageEnabled = false;
 
 
 	// binding layout
-	wgpu::BindGroupLayoutEntry bindGroupLayoutEntry = wgpu::Default;
-	bindGroupLayoutEntry.binding = 0;
-	bindGroupLayoutEntry.visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
-	bindGroupLayoutEntry.buffer.type = wgpu::BufferBindingType::Uniform;
-	bindGroupLayoutEntry.buffer.minBindingSize = sizeof(Uniforms::RenderUniforms);
+	wgpu::BindGroupLayoutEntry bindgroup_layout_entry = wgpu::Default;
+	bindgroup_layout_entry.binding = 0;
+	bindgroup_layout_entry.visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
+	bindgroup_layout_entry.buffer.type = wgpu::BufferBindingType::Uniform;
+	bindgroup_layout_entry.buffer.minBindingSize = sizeof(Uniforms::RenderUniforms);
 
-	wgpu::BindGroupLayoutDescriptor bindGroupLayoutDesc{};
-	bindGroupLayoutDesc.entryCount = 1;
-	bindGroupLayoutDesc.entries = &bindGroupLayoutEntry;
-	m_bindgroup_layout = m_device.createBindGroupLayout(bindGroupLayoutDesc);
+	wgpu::BindGroupLayoutDescriptor bindgroup_layout_desc{};
+	bindgroup_layout_desc.entryCount = 1;
+	bindgroup_layout_desc.entries = &bindgroup_layout_entry;
+	m_bindgroup_layout = m_device.createBindGroupLayout(bindgroup_layout_desc);
 	if (!m_bindgroup_layout) {
-		std::cerr << "Could not create bind group layout!" << std::endl;
+		log("Could not create bind group layout!", LoggingSeverity::Error);
 		return false;
 	}
 
 
 	// create pipeline layout
-	wgpu::PipelineLayoutDescriptor renderPipelineLayoutDesc{};
-	renderPipelineLayoutDesc.bindGroupLayoutCount = 1;
-	renderPipelineLayoutDesc.bindGroupLayouts = (WGPUBindGroupLayout*)&m_bindgroup_layout;
+	wgpu::PipelineLayoutDescriptor renderpipeline_layout_desc{};
+	renderpipeline_layout_desc.bindGroupLayoutCount = 1;
+	renderpipeline_layout_desc.bindGroupLayouts = (WGPUBindGroupLayout*)&m_bindgroup_layout;
 
-	wgpu::PipelineLayout pipelineLayout = m_device.createPipelineLayout(renderPipelineLayoutDesc);
-	if (!pipelineLayout) {
-		std::cerr << "Could not create pipeline layout!" << std::endl;
+	wgpu::PipelineLayout pipeline_layout = m_device.createPipelineLayout(renderpipeline_layout_desc);
+	if (!pipeline_layout) {
+		log("Could not create pipeline layout!", LoggingSeverity::Error);
 		return false;
 	}
-	renderPipelineDesc.layout = pipelineLayout;
+	renderpipeline_desc.layout = pipeline_layout;
 
-	m_renderpipeline = m_device.createRenderPipeline(renderPipelineDesc);
+	m_renderpipeline = m_device.createRenderPipeline(renderpipeline_desc);
 	if (!m_renderpipeline) {
-		std::cerr << "Could not create render pipeline!" << std::endl;
+		log("Could not create render pipeline!", LoggingSeverity::Error);
 		return false;
 	}
-	std::cout << "Render pipeline: " << m_renderpipeline << std::endl;
+	log(std::format("Render pipeline: {}", (void*)m_renderpipeline));
 
 	return true;
 }
@@ -651,19 +595,14 @@ void Application::terminate_renderpipeline()
 	m_bindgroup_layout.release();
 }
 
-bool Application::init_geometry()
+bool Application::init_pointcloud()
 {
 	std::unordered_map<int64_t, Point3D> points;
 	if (!ResourceManager::read_points3d(RESOURCE_DIR "/points3D_garden.bin", points)) {
 		return false;
 	}
-
+	
 	std::vector<float> vertexData;
-
-	/*if (!ResourceManager::loadGeometry(RESOURCE_DIR "/quad.txt", vertexData)) {
-		std::cerr << "Could not load geometry!" << std::endl;
-		return false;
-	}*/
 
 	for (auto kv : points) {
 		auto point = kv.second;
@@ -692,7 +631,6 @@ bool Application::init_geometry()
 		vertexData.push_back(0);
 	}
 
-
 	m_vertexcount = static_cast<int>(vertexData.size() / (sizeof(VertexAttributes) / sizeof(float)));
 
 	wgpu::BufferDescriptor bufferDesc{};
@@ -702,18 +640,18 @@ bool Application::init_geometry()
 
 	m_vertexbuffer = m_device.createBuffer(bufferDesc);
 	if (!m_vertexbuffer) {
-		std::cerr << "Could not create vertex buffer!" << std::endl;
+		log("Could not create vertex buffer!", LoggingSeverity::Error);
 		return false;
 	}
 	m_queue.writeBuffer(m_vertexbuffer, 0, vertexData.data(), bufferDesc.size);
 
-	std::cout << "Vertex buffer: " << m_vertexbuffer << std::endl;
-	std::cout << "Vertex count: " << m_vertexcount << std::endl;
+	log(std::format("Vertex buffer: {}", (void*)m_vertexbuffer));
+	log(std::format("Vertex count: {}", m_vertexcount));
 
 	return true;
 }
 
-void Application::terminate_geometry()
+void Application::terminate_pointcloud()
 {
 	m_vertexbuffer.destroy();
 	m_vertexbuffer.release();
@@ -735,7 +673,7 @@ bool Application::init_uniforms()
 	// initial uniform values
 	m_renderuniforms.modelMatrix = glm::scale(glm::mat4(1.0), glm::vec3(0.1));
 	m_renderuniforms.viewMatrix = glm::lookAt(glm::vec3(-5.f, -5.f, 3.f), glm::vec3(0.0f), glm::vec3(0, 0, 1));
-	m_renderuniforms.projectionMatrix = glm::perspective((float)(45 * M_PI / 180), (float)(WINDOW_W / WINDOW_H), 0.01f, 100.0f);
+	m_renderuniforms.projectionMatrix = glm::perspective((float)(45 * M_PI / 180), (float)(m_window_width / m_window_height), 0.01f, 100.0f);
 	m_queue.writeBuffer(m_renderuniform_buffer, 0, &m_renderuniforms, sizeof(Uniforms::RenderUniforms));
 
 	update_viewmatrix();
@@ -775,6 +713,143 @@ void Application::terminate_bindgroup()
 	m_bindgroup.release();
 }
 
+bool Application::init_gui()
+{
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	auto io = ImGui::GetIO();
+
+	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+
+	if (!ImGui_ImplGlfw_InitForOther(m_window, true)) {
+		log("Cannot initialize Dear ImGui for GLFW!", LoggingSeverity::Error);
+		return false;
+	}
+
+	ImGui_ImplWGPU_InitInfo initInfo{};
+	initInfo.Device = m_device;
+	initInfo.RenderTargetFormat = m_swapchain_format;
+	initInfo.DepthStencilFormat = m_depthtexture_format;
+	initInfo.NumFramesInFlight = 3;
+	if (!ImGui_ImplWGPU_Init(&initInfo)) {
+		log("Cannot initialize Dear ImGui for WebGPU!", LoggingSeverity::Error);
+		return false;
+	}
+
+	
+	return true;
+}
+
+
+void Application::terminate_gui()
+{
+	ImGui_ImplGlfw_Shutdown();
+	ImGui_ImplWGPU_Shutdown();
+}
+
+bool Application::init_k4a()
+{
+	const uint32_t device_count = k4a::device::get_installed_count();
+	if (device_count == 0)
+	{
+		throw std::runtime_error("No Azure Kinect devices detected!");
+	}
+
+	k4a_device_configuration_t config = K4A_DEVICE_CONFIG_INIT_DISABLE_ALL;
+	config.camera_fps = K4A_FRAMES_PER_SECOND_30;
+	config.depth_mode = K4A_DEPTH_MODE_WFOV_2X2BINNED;
+	config.color_format = K4A_IMAGE_FORMAT_COLOR_BGRA32;
+	config.color_resolution = K4A_COLOR_RESOLUTION_720P;
+	config.synchronized_images_only = true;
+
+	log("Started opening k4a device...");
+
+	m_k4a_device = k4a::device::open(K4A_DEVICE_DEFAULT);
+	m_k4a_device.start_cameras(&config);
+
+	log("Finished opening k4a device.");
+	
+	m_color_texture = Texture(m_device, m_queue, 1280, 720);
+	
+	return true;
+}
+
+void Application::terminate_k4a()
+{
+}
+
+void Application::render_menu()
+{
+	ImGui::Begin("Yep", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
+	ImGui::SetWindowPos({ 0.f, 0.f });
+	ImGui::SetWindowSize({ GUI_MENU_WIDTH, (float)m_window_height });
+
+
+	const char* items[] = { "Capture", "Pointcloud" };
+	static const char* current_item = "Select";
+	if (ImGui::BeginCombo("Mode", current_item)) {
+		for (int i = 0; i < IM_ARRAYSIZE(items); i++) {
+			bool is_selected = current_item == items[i];
+			if (ImGui::Selectable(items[i], is_selected)) {
+				current_item = items[i];
+			}
+			if (is_selected) {
+				ImGui::SetItemDefaultFocus();
+			}
+		}
+		ImGui::EndCombo();
+
+
+	}
+	if (strcmp(current_item, "Capture") == 0) {
+		m_app_state = AppState::Capture;
+
+		if (ImGui::Button("Capture Image")) {
+			// TODO: capture image
+		}
+	}
+	else if (strcmp(current_item, "Pointcloud") == 0) {
+		m_app_state = AppState::Pointcloud;
+	}
+	else {
+		m_app_state = AppState::Default;
+	}
+
+	ImGui::End();
+}
+
+void Application::render_state_default()
+{
+}
+
+void Application::render_state_capture()
+{
+	k4a::capture capture;
+	if (m_k4a_device.get_capture(&capture, std::chrono::milliseconds(0))) {
+		const k4a::image color_image = capture.get_color_image();
+
+		m_color_texture.update(reinterpret_cast<const BgraPixel*>(color_image.get_buffer()));
+	}
+
+	ImGui::Begin("Camera Capture", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
+	ImGui::SetWindowPos({ GUI_MENU_WIDTH, 0.f });
+	ImGui::SetWindowSize({ m_window_width - GUI_MENU_WIDTH, (float)m_window_height });
+
+	ImVec2 image_size(static_cast<float>(m_color_texture.width()), static_cast<float>(m_color_texture.height()));
+	ImGui::Image((ImTextureID)(intptr_t)m_color_texture.view(), image_size);
+
+	ImGui::End();
+}
+
+void Application::render_state_pointcloud(wgpu::RenderPassEncoder renderpass)
+{
+	renderpass.setPipeline(m_renderpipeline);
+	renderpass.setVertexBuffer(0, m_vertexbuffer, 0, m_vertexbuffer.getSize()/*m_vertexCount * sizeof(VertexAttributes)*/);
+	renderpass.setBindGroup(0, m_bindgroup, 0, nullptr);
+	renderpass.draw(m_vertexcount, 1, 0, 0);
+}
+
+
 void Application::update_projectionmatrix()
 {
 	int width, height;
@@ -792,70 +867,24 @@ void Application::update_viewmatrix()
 	m_queue.writeBuffer(m_renderuniform_buffer, offsetof(Uniforms::RenderUniforms, viewMatrix), &m_renderuniforms.viewMatrix, sizeof(Uniforms::RenderUniforms::viewMatrix));
 }
 
-void Application::update_draginertia()
+
+
+void Application::log(std::string message, LoggingSeverity severity)
 {
-	constexpr float eps = 1e-4f;
-
-	if (!m_dragstate.active) {
-		if (std::abs(m_dragstate.velocity.x) < eps && std::abs(m_dragstate.velocity.y) < eps) {
-			return;
-		}
-
-		m_camerastate.angles += m_dragstate.velocity;
-		m_camerastate.angles.y = glm::clamp(m_camerastate.angles.y, -(float)M_PI / 2 + 1e-5f, (float)M_PI / 2 - 1e-5f);
-
-		m_dragstate.velocity *= m_dragstate.INERTIA;
-		update_viewmatrix();
-	}
-}
-
-bool Application::init_gui()
-{
-
-	// set up Dear ImGui context
-	IMGUI_CHECKVERSION();
-	/*m_context = */ImGui::CreateContext();
-	//glfwMakeContextCurrent(m_window);
-	//ImGui::SetCurrentContext(m_context);
-	auto io = ImGui::GetIO();
-
-	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
-
-	// set up font
-	/*io.Fonts->AddFontFromFileTTF(RESOURCE_DIR "/ProggyClean.ttf", 26);
-	ImGui::GetStyle().ScaleAllSizes(2.f);*/
-
-	// set up platform/renderer backends
-	if (!ImGui_ImplGlfw_InitForOther(m_window, true)) {
-		std::cerr << "Cannot initialize Dear ImGui for GLFW!" << std::endl;
-		return false;
-	}
-
-	ImGui_ImplWGPU_InitInfo initInfo{};
-	initInfo.Device = m_device;
-	initInfo.RenderTargetFormat = m_swapchain_format;
-	initInfo.DepthStencilFormat = m_depthtexture_format;
-	initInfo.NumFramesInFlight = 3;
-	if (!ImGui_ImplWGPU_Init(&initInfo)) {
-		std::cerr << "Cannot initialize Dear ImGui for WebGPU!" << std::endl;
-		return false;
-	}
-
-
-	return true;
-}
-
-void Application::terminate_gui()
-{
-	ImGui_ImplGlfw_Shutdown();
-	ImGui_ImplWGPU_Shutdown();
-}
-
-void Application::update_gui(wgpu::RenderPassEncoder renderPass)
-{
+	if (!m_logging_enabled)
+		return;
 	
+	switch (severity) {
+		case LoggingSeverity::Info:
+			std::cout << ">> " << message << std::endl;
+			break;
+		case LoggingSeverity::Warning:
+			std::cout << ">> [WARNING]: " << message << std::endl;
+			break;
+		case LoggingSeverity::Error:
+			std::cerr << ">> [ERROR]: " << message << std::endl;
+			break;
+		default:
+			break;
+	}
 }
-
-
-
-

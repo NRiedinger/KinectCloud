@@ -1,4 +1,4 @@
-#include "Window.h"
+#include "Application.h"
 #include "ResourceManager.h"
 #include "GaussianModel.h"
 
@@ -13,27 +13,15 @@
 
 int main(int, char**) {
 
-	/*Application app;
-
-	if (!app.on_init()) {
+	Application app;
+	if (!app.on_init())
 		return 1;
-	}
 
 	while (app.is_running()) {
 		app.on_frame();
 	}
 
-	app.on_finish();*/
-
-	Window window;
-	if (!window.on_init())
-		return 1;
-
-	while (window.is_running()) {
-		window.on_frame();
-	}
-
-	window.on_finish();
+	app.on_finish();
 
 	/*Camera cam;
 	cam.capture_point_cloud();*/

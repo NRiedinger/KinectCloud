@@ -1,44 +1,43 @@
 #include <GLFW/glfw3.h>
 #include <webgpu/webgpu.hpp>
+#include <string>
+
+#include <imgui.h>
+
 #include "Structs.h"
+#include "Texture.h"
 
-#include <array>
+#define DEFAULT_WINDOW_W 1920
+#define DEFAULT_WINDOW_H 1080
 
-#define WINDOW_W 1920
-#define WINDOW_H 1080
-#define WINDOW_TITLE "DepthSplat"
+#define DEFAULT_WINDOW_TITLE "DepthSplat"
+
+#define GUI_MENU_WIDTH 500.f
+
 
 #pragma once
 class Application
 {
 public:
+	Application();
 	bool on_init();
-	void on_frame();
 	void on_finish();
+	void on_frame();
 	bool is_running();
+
 
 	// event handlers
 	void on_resize();
-	void on_mousemove(double xPos, double yPos);
+	void on_mousemove(double x_pos, double y_pos);
 	void on_mousebutton(int button, int action, int mods);
-	void on_scroll(double xOffset, double yOffset);
-
-	CameraState get_camerastate() const {
-		return m_camerastate;
-	}
-
+	void on_scroll(double x_offset, double y_offset);
 
 private:
-	bool init_pointcloud();
-
 	bool init_window_and_device();
 	void terminate_window_and_device();
 
 	bool init_swapchain();
 	void terminate_swapchain();
-
-	bool init_test();
-	void terminate_test();
 
 	bool init_depthbuffer();
 	void terminate_depthbuffer();
@@ -46,8 +45,8 @@ private:
 	bool init_renderpipeline();
 	void terminate_renderpipeline();
 
-	bool init_geometry();
-	void terminate_geometry();
+	bool init_pointcloud();
+	void terminate_pointcloud();
 
 	bool init_uniforms();
 	void terminate_uniforms();
@@ -55,24 +54,35 @@ private:
 	bool init_bindgroup();
 	void terminate_bindgroup();
 
+	bool init_gui();
+	void terminate_gui();
 
+	bool init_k4a();
+	void terminate_k4a();
+
+
+	void render_menu();
+	void render_state_default();
+	void render_state_capture();
+	void render_state_pointcloud(wgpu::RenderPassEncoder renderpass);
+
+	
 	void update_projectionmatrix();
 	void update_viewmatrix();
 
-	void update_draginertia();
-
-	// GUI
-	bool init_gui();
-	void terminate_gui();
-	void update_gui(wgpu::RenderPassEncoder renderPass);
+	void log(std::string message, LoggingSeverity severity = LoggingSeverity::Info);
 
 private:
+	std::string m_window_title = DEFAULT_WINDOW_TITLE;
+	int m_window_width = DEFAULT_WINDOW_W;
+	int m_window_height = DEFAULT_WINDOW_H;
+	bool m_is_minimized = false;
+	bool m_logging_enabled = true;
 
-	// window and deivce
 	GLFWwindow* m_window = nullptr;
-	wgpu::Instance m_instance = nullptr;
-	wgpu::Surface m_surface = nullptr;
 	wgpu::Device m_device = nullptr;
+	wgpu::Surface m_surface = nullptr;
+	wgpu::Instance m_instance = nullptr;
 	wgpu::Queue m_queue = nullptr;
 	std::unique_ptr<wgpu::ErrorCallback> m_uncaptured_error_callback;
 	std::unique_ptr<wgpu::DeviceLostCallback> m_device_lost_callback;
@@ -102,14 +112,11 @@ private:
 	// bind group
 	wgpu::BindGroup m_bindgroup = nullptr;
 
-	// camera
 	CameraState m_camerastate;
 	DragState m_dragstate;
+	AppState m_app_state = AppState::Default;
 
-	// point cloud
-	std::unordered_map<int64_t, Point3D> m_points;
-
-	// test
-	wgpu::TextureView m_offscreen_texture_view = nullptr;
+	Texture m_color_texture;
+	k4a::device m_k4a_device;
 };
 
