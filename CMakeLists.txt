@@ -29,9 +29,6 @@ set(SOURCES
 	src/Camera.h
 	src/Camera.cpp
 	
-	src/Window.h
-	src/Window.cpp
-	
 	src/Texture.h
 	src/Texture.cpp
 	
