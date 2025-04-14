@@ -129,7 +129,7 @@ private:
 	// camera capture
 	Texture m_color_texture;
 	k4a::device m_k4a_device;
-
+	wgpu::Buffer m_pixelbuffer;
 
 };
 

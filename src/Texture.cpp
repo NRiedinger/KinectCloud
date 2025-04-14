@@ -1,15 +1,25 @@
 #include "Texture.h"
 
-Texture::Texture(wgpu::Device device, wgpu::Queue queue, int width, int height)
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#define __STDC_LIB_EXT1__
+#include "utils/stb_image_write.h"
+
+
+#include <string>
+
+
+Texture::Texture(wgpu::Device device, wgpu::Queue queue, wgpu::Buffer* pixelbuffer, uint64_t pixelbuffer_size, int width, int height)
     : m_width(width), 
     m_height(height),
     m_device(device),
-    m_queue(queue)
+    m_queue(queue),
+    m_pixelbuffer(pixelbuffer),
+    m_pixelbuffer_size(pixelbuffer_size)
 {
     wgpu::TextureDescriptor texture_desc{};
     texture_desc.nextInChain = NULL;
-    texture_desc.label = NULL;
-    texture_desc.usage = wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::TextureBinding;
+    texture_desc.label = "texture";
+    texture_desc.usage = wgpu::TextureUsage::CopyDst | wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::CopySrc;
     texture_desc.dimension = wgpu::TextureDimension::_2D;
     texture_desc.size.width = static_cast<uint32_t>(m_width);
     texture_desc.size.height = static_cast<uint32_t>(m_height);
@@ -21,7 +31,6 @@ Texture::Texture(wgpu::Device device, wgpu::Queue queue, int width, int height)
     texture_desc.viewFormats = NULL;
 
     m_texture = m_device.createTexture(texture_desc);
-    //m_texture_view = m_texture.createView();
 
     wgpu::TextureViewDescriptor view_desc{};
     view_desc.nextInChain = NULL;
@@ -35,6 +44,8 @@ Texture::Texture(wgpu::Device device, wgpu::Queue queue, int width, int height)
     view_desc.aspect = wgpu::TextureAspect::All;
 
     m_texture_view = wgpuTextureCreateView(m_texture, &view_desc);
+
+    std::cout << "asdfsaf " << m_pixelbuffer << std::endl;
 }
 
 Texture::Texture(Texture&& other) noexcept 
@@ -43,7 +54,9 @@ Texture::Texture(Texture&& other) noexcept
     m_width(other.m_width),
     m_height(other.m_height),
     m_texture(other.m_texture),
-    m_texture_view(other.m_texture_view) 
+    m_texture_view(other.m_texture_view),
+    m_pixelbuffer(other.m_pixelbuffer),
+    m_pixelbuffer_size(other.m_pixelbuffer_size)
 {
     other.m_texture = nullptr;
     other.m_texture_view = nullptr;
@@ -66,6 +79,8 @@ Texture& Texture::operator=(Texture&& other) noexcept
         m_height = other.m_height;
         m_texture = other.m_texture;
         m_texture_view = other.m_texture_view;
+        m_pixelbuffer = other.m_pixelbuffer;
+        m_pixelbuffer_size = other.m_pixelbuffer_size;
 
         other.m_texture = nullptr;
         other.m_texture_view = nullptr;
@@ -102,4 +117,59 @@ void Texture::delete_texture()
 {
     m_texture = nullptr;
     m_texture_view = nullptr;
+}
+
+bool Texture::save_to_file(const std::filesystem::path path)
+{
+    wgpu::CommandEncoderDescriptor command_encoder_desc{};
+    command_encoder_desc.label = "save texture command encoder";
+    wgpu::CommandEncoder encoder = m_device.createCommandEncoder(command_encoder_desc);
+
+    wgpu::ImageCopyTexture source{};
+    source.texture = m_texture;
+    wgpu::ImageCopyBuffer destination = wgpu::Default;
+    destination.buffer = *m_pixelbuffer;
+    destination.layout.bytesPerRow = 4 * m_width;
+    destination.layout.offset = 0;
+    destination.layout.rowsPerImage = m_height;
+    encoder.copyTextureToBuffer(source, destination, { (uint32_t)m_width, (uint32_t)m_height, 1 });
+
+    wgpu::Queue queue = m_device.getQueue();
+
+    wgpu::CommandBufferDescriptor commandbuffer_desc{};
+    commandbuffer_desc.label = "command buffer";
+    wgpu::CommandBuffer command = encoder.finish(commandbuffer_desc);
+    queue.submit(command);
+
+    encoder.release();
+    command.release();
+
+    bool done = false;
+    bool failed = false;
+
+    auto callback_handle = m_pixelbuffer->mapAsync(wgpu::MapMode::Read, 0, m_pixelbuffer_size, [&](wgpu::BufferMapAsyncStatus status) {
+        if (status != wgpu::BufferMapAsyncStatus::Success) {
+            failed = true;
+            done = true;
+            return;
+        }
+
+        unsigned char* pixeldata = (unsigned char*)m_pixelbuffer->getConstMappedRange(0, m_pixelbuffer_size);
+        int bytes_per_row = 4 * m_width;
+        int success = stbi_write_png(path.string().c_str(), (int)m_width, (int)m_height, 4, pixeldata, bytes_per_row);
+
+        m_pixelbuffer->unmap();
+
+        failed = success == 0;
+        done = true;
+    });
+
+    // wait for mapping to finish
+    while (!done) {
+        m_device.tick();
+    }
+
+    queue.release();
+
+    return !failed;
 }

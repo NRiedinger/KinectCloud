@@ -40,6 +40,7 @@ set(SOURCES
 	src/utils/tinyply.h
 	src/utils/glfw3webgpu.c
 	src/utils/glfw3webgpu.h
+	src/utils/stb_image_write.h
 	
 	# gpu.cpp
 	src/gpu.cpp/gpu.h
@@ -85,8 +86,10 @@ target_link_libraries(App PRIVATE ${LIBRARIES})
 option(DEV_MODE "set up development helper settings" ON)
 if(DEV_MODE)
 	target_compile_definitions(App PRIVATE RESOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/resources")
+	target_compile_definitions(App PRIVATE OUTPUT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/output")
 else()
 	target_compile_definitions(App PRIVATE RESOURCE_DIR="./resources")
+	target_compile_definitions(App PRIVATE OUTPUT_DIR="./output")
 endif()
 
 

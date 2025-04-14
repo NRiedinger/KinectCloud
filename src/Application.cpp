@@ -774,8 +774,9 @@ void Application::terminate_gui()
 bool Application::init_k4a()
 {
 	const uint32_t device_count = k4a::device::get_installed_count();
-	if (device_count == 0)
+	if (device_count < 1)
 	{
+		log("No Azure Kinect devices detected!", LoggingSeverity::Error);
 		throw std::runtime_error("No Azure Kinect devices detected!");
 	}
 
@@ -816,7 +817,16 @@ bool Application::init_k4a()
 		default:
 			break;
 	}
-	m_color_texture = Texture(m_device, m_queue, texture_dims.x, texture_dims.y);
+
+	wgpu::BufferDescriptor pixelbuffer_desc = {};
+	pixelbuffer_desc.mappedAtCreation = false;
+	pixelbuffer_desc.usage = wgpu::BufferUsage::MapRead | wgpu::BufferUsage::CopyDst;
+	pixelbuffer_desc.size = 4 * texture_dims.x * texture_dims.y;
+	m_pixelbuffer = m_device.createBuffer(pixelbuffer_desc);
+	log(std::format("Save image pixel buffer: {}", (void*) & m_pixelbuffer));
+
+	m_color_texture = Texture(m_device, m_queue, &m_pixelbuffer, pixelbuffer_desc.size, texture_dims.x, texture_dims.y);
+	log(std::format("Camera color texture: {}", (void*)&m_color_texture));
 	
 	return true;
 }
@@ -852,7 +862,14 @@ void Application::render_menu()
 		m_app_state = AppState::Capture;
 
 		if (ImGui::Button("Capture Image")) {
-			// TODO: capture image
+			std::string filename = OUTPUT_DIR + std::format("/{}.png", (int)(glfwGetTime() * 1000));
+			
+			if (m_color_texture.save_to_file(filename)) {
+				log("Successfully saved " + filename);
+			} 
+			else {
+				log("Failed to save " + filename, LoggingSeverity::Error);
+			}
 		}
 	}
 	else if (strcmp(current_item, "Pointcloud") == 0) {
