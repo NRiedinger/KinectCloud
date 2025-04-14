@@ -57,14 +57,20 @@ private:
 	bool init_gui();
 	void terminate_gui();
 
+	
+	
 	bool init_k4a();
 	void terminate_k4a();
+
+	
 
 
 	void render_menu();
 	void render_state_default();
 	void render_state_capture();
-	void render_state_pointcloud(wgpu::RenderPassEncoder renderpass);
+	void render_state_pointcloud();
+
+	void handle_pointcloud_mouse_events();
 
 	
 	void update_projectionmatrix();
@@ -90,6 +96,8 @@ private:
 	// swap chain
 	wgpu::TextureFormat m_swapchain_format = wgpu::TextureFormat::BGRA8Unorm;
 	wgpu::SwapChain m_swapchain = nullptr;
+	wgpu::Texture m_rendertarget_texture = nullptr;
+	WGPUTextureView m_rendertarget_texture_view = nullptr;
 
 	// depth buffer
 	wgpu::TextureFormat m_depthtexture_format = wgpu::TextureFormat::Depth24Plus;
@@ -114,9 +122,11 @@ private:
 
 	CameraState m_camerastate;
 	DragState m_dragstate;
-	AppState m_app_state = AppState::Default;
+	AppState m_app_state = AppState::Pointcloud;
 
+	// camera capture
 	Texture m_color_texture;
 	k4a::device m_k4a_device;
+
 };
 

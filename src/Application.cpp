@@ -77,6 +77,7 @@ void Application::on_frame()
 		return;
 
 	wgpu::TextureView next_texture = m_swapchain.getCurrentTextureView();
+	//wgpu::TextureView next_texture = m_rendertarget_texture_view;
 	if (!next_texture) {
 		log("Cannot get next swap chain texture!", LoggingSeverity::Error);
 		return;
@@ -110,14 +111,14 @@ void Application::on_frame()
 	depthstencil_attachment.stencilStoreOp = wgpu::StoreOp::Undefined;
 	depthstencil_attachment.stencilReadOnly = true;
 
-	renderpass_desc.depthStencilAttachment = &depthstencil_attachment;
+	renderpass_desc.depthStencilAttachment = nullptr/*&depthstencil_attachment*/;
 
 	renderpass_desc.timestampWrites = nullptr;
 
 	wgpu::RenderPassEncoder renderpass = encoder.beginRenderPass(renderpass_desc);
+	
 
-
-	// // start ImGui frame
+	// start ImGui frame
 	ImGui_ImplWGPU_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
@@ -131,7 +132,7 @@ void Application::on_frame()
 			render_state_capture();
 			break;
 		case AppState::Pointcloud:
-			render_state_pointcloud(renderpass);
+			render_state_pointcloud();
 			break;
 		case AppState::Default:
 		default:
@@ -306,12 +307,12 @@ bool Application::init_window_and_device()
 	required_limits.limits.maxSamplersPerShaderStage = 1;
 
 	// create device
-	wgpu::DeviceDescriptor deviceDesc{};
-	deviceDesc.label = "device";
-	deviceDesc.requiredFeatureCount = 0;
-	deviceDesc.requiredLimits = &required_limits;
-	deviceDesc.defaultQueue.label = "default queue";
-	m_device = adapter.requestDevice(deviceDesc);
+	wgpu::DeviceDescriptor device_desc{};
+	device_desc.label = "device";
+	device_desc.requiredFeatureCount = 0;
+	device_desc.requiredLimits = &required_limits;
+	device_desc.defaultQueue.label = "default queue";
+	m_device = adapter.requestDevice(device_desc);
 	if (!m_device) {
 		log("Could not request device!", LoggingSeverity::Error);
 		return false;
@@ -325,6 +326,7 @@ bool Application::init_window_and_device()
 			std::cout << " (message: " << message << ")";
 		}
 		std::cout << std::endl;
+		exit(0);
 	});
 
 	m_device_lost_callback = m_device.setDeviceLostCallback([](wgpu::DeviceLostReason reason, char const* message) {
@@ -347,7 +349,7 @@ bool Application::init_window_and_device()
 		}
 	});
 
-	glfwSetCursorPosCallback(m_window, [](GLFWwindow* window, double x_pos, double y_pos) {
+	/*glfwSetCursorPosCallback(m_window, [](GLFWwindow* window, double x_pos, double y_pos) {
 		auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
 		if (that) {
 			that->on_mousemove(x_pos, y_pos);
@@ -366,7 +368,7 @@ bool Application::init_window_and_device()
 		if (that) {
 			that->on_scroll(x_offset, y_offset);
 		}
-	});
+	});*/
 
 	adapter.release(); 
 	
@@ -400,6 +402,27 @@ bool Application::init_swapchain()
 		return false;
 	}
 	log(std::format("Swapchain: {}", (void*)m_swapchain));
+
+	wgpu::TextureDescriptor target_texture_desc{};
+	target_texture_desc.label = "render target";
+	target_texture_desc.dimension = wgpu::TextureDimension::_2D;
+	target_texture_desc.size = { 1280, 720, 1 };
+	target_texture_desc.format = m_swapchain_format;
+	target_texture_desc.mipLevelCount = 1;
+	target_texture_desc.sampleCount = 1;
+	target_texture_desc.usage = wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::TextureBinding;
+	target_texture_desc.viewFormats = nullptr;
+	target_texture_desc.viewFormatCount = 0;
+	m_rendertarget_texture = m_device.createTexture(target_texture_desc);
+
+	wgpu::TextureViewDescriptor texture_view_desc{};
+	texture_view_desc.label = "render texture view";
+	texture_view_desc.baseArrayLayer = 0;
+	texture_view_desc.arrayLayerCount = 1;
+	texture_view_desc.baseMipLevel = 0;
+	texture_view_desc.mipLevelCount = 1;
+	texture_view_desc.aspect = wgpu::TextureAspect::All;
+	m_rendertarget_texture_view = wgpuTextureCreateView(m_rendertarget_texture, &texture_view_desc);
 	
 	return true;
 }
@@ -417,7 +440,8 @@ bool Application::init_depthbuffer()
 	depthtexture_desc.format = m_depthtexture_format;
 	depthtexture_desc.mipLevelCount = 1;
 	depthtexture_desc.sampleCount = 1;
-	depthtexture_desc.size = { static_cast<uint32_t>(m_window_width), static_cast<uint32_t>(m_window_height), 1 };
+	//depthtexture_desc.size = { static_cast<uint32_t>(m_window_width), static_cast<uint32_t>(m_window_height), 1 };
+	depthtexture_desc.size = { 1280, 720, 1 };
 	depthtexture_desc.usage = wgpu::TextureUsage::RenderAttachment;
 	depthtexture_desc.viewFormatCount = 1;
 	depthtexture_desc.viewFormats = (WGPUTextureFormat*)&m_depthtexture_format;
@@ -729,7 +753,7 @@ bool Application::init_gui()
 	ImGui_ImplWGPU_InitInfo initInfo{};
 	initInfo.Device = m_device;
 	initInfo.RenderTargetFormat = m_swapchain_format;
-	initInfo.DepthStencilFormat = m_depthtexture_format;
+	//initInfo.DepthStencilFormat = m_depthtexture_format;
 	initInfo.NumFramesInFlight = 3;
 	if (!ImGui_ImplWGPU_Init(&initInfo)) {
 		log("Cannot initialize Dear ImGui for WebGPU!", LoggingSeverity::Error);
@@ -831,7 +855,7 @@ void Application::render_state_capture()
 		m_color_texture.update(reinterpret_cast<const BgraPixel*>(color_image.get_buffer()));
 	}
 
-	ImGui::Begin("Camera Capture", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
+	ImGui::Begin("Camera Capture Window", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
 	ImGui::SetWindowPos({ GUI_MENU_WIDTH, 0.f });
 	ImGui::SetWindowSize({ m_window_width - GUI_MENU_WIDTH, (float)m_window_height });
 
@@ -841,12 +865,99 @@ void Application::render_state_capture()
 	ImGui::End();
 }
 
-void Application::render_state_pointcloud(wgpu::RenderPassEncoder renderpass)
+void Application::render_state_pointcloud()
 {
+	wgpu::TextureView next_texture = m_rendertarget_texture_view;
+	if (!next_texture) {
+		return;
+	}
+
+	wgpu::CommandEncoderDescriptor command_encoder_desc{};
+	command_encoder_desc.label = "command encoder";
+	wgpu::CommandEncoder encoder = m_device.createCommandEncoder(command_encoder_desc);
+
+	wgpu::RenderPassDescriptor renderpass_desc{};
+
+	wgpu::RenderPassColorAttachment renderpass_color_attachment{};
+	renderpass_color_attachment.view = next_texture;
+	renderpass_color_attachment.resolveTarget = nullptr;
+	renderpass_color_attachment.loadOp = wgpu::LoadOp::Clear;
+	renderpass_color_attachment.storeOp = wgpu::StoreOp::Store;
+	renderpass_color_attachment.clearValue = wgpu::Color{ .05, .05, .05, 1.0 };
+	renderpass_color_attachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
+
+	renderpass_desc.colorAttachmentCount = 1;
+	renderpass_desc.colorAttachments = &renderpass_color_attachment;
+
+	wgpu::RenderPassDepthStencilAttachment depthstencil_attachment{};
+	depthstencil_attachment.view = m_depthtexture_view;
+	depthstencil_attachment.depthClearValue = 1.f;
+	depthstencil_attachment.depthLoadOp = wgpu::LoadOp::Clear;
+	depthstencil_attachment.depthStoreOp = wgpu::StoreOp::Store;
+	depthstencil_attachment.depthReadOnly = false;
+	depthstencil_attachment.stencilClearValue = 0;
+	depthstencil_attachment.stencilLoadOp = wgpu::LoadOp::Undefined;
+	depthstencil_attachment.stencilStoreOp = wgpu::StoreOp::Undefined;
+	depthstencil_attachment.stencilReadOnly = true;
+
+	renderpass_desc.depthStencilAttachment = &depthstencil_attachment;
+
+	renderpass_desc.timestampWrites = nullptr;
+
+	wgpu::RenderPassEncoder renderpass = encoder.beginRenderPass(renderpass_desc);
+
+
 	renderpass.setPipeline(m_renderpipeline);
 	renderpass.setVertexBuffer(0, m_vertexbuffer, 0, m_vertexbuffer.getSize()/*m_vertexCount * sizeof(VertexAttributes)*/);
 	renderpass.setBindGroup(0, m_bindgroup, 0, nullptr);
 	renderpass.draw(m_vertexcount, 1, 0, 0);
+
+
+	ImGui::Begin("Pointcloud Window", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
+	ImGui::SetWindowPos({ GUI_MENU_WIDTH, 0.f });
+	ImGui::SetWindowSize({ m_window_width - GUI_MENU_WIDTH, (float)m_window_height });
+
+	ImGui::Image((ImTextureID)(intptr_t)m_rendertarget_texture_view, { 1280, 720 });
+
+	// handle input
+	handle_pointcloud_mouse_events();
+
+	ImGui::End();
+
+
+	renderpass.end();
+	renderpass.release();
+
+	wgpu::CommandBufferDescriptor commandbuffer_desc{};
+	commandbuffer_desc.label = "command buffer";
+	wgpu::CommandBuffer command = encoder.finish(commandbuffer_desc);
+
+	encoder.release();
+	m_queue.submit(command);
+}
+
+void Application::handle_pointcloud_mouse_events()
+{
+	ImVec2 mouse_pos = ImGui::GetMousePos();
+
+	if (ImGui::IsWindowHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left) && !m_dragstate.active) {
+		m_dragstate.active = true;
+		m_dragstate.startMouse = glm::vec2(mouse_pos.x, mouse_pos.y);
+		m_dragstate.startCameraState = m_camerastate;
+	}
+	if(ImGui::IsMouseReleased(ImGuiMouseButton_Left)){
+		m_dragstate.active = false;
+	}
+
+	if (m_dragstate.active) {
+		glm::vec2 currentMouse = glm::vec2(mouse_pos.x, mouse_pos.y);
+		glm::vec2 delta = (currentMouse - m_dragstate.startMouse) * m_dragstate.SENSITIVITY;
+		m_camerastate.angles = m_dragstate.startCameraState.angles + delta;
+
+		// clamp pitch
+		m_camerastate.angles.y = glm::clamp(m_camerastate.angles.y, -(float)M_PI / 2 + 1e-5f, (float)M_PI / 2 - 1e-5f);
+		update_viewmatrix();
+	}
 }
 
 
