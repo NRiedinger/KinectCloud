@@ -406,7 +406,7 @@ bool Application::init_swapchain()
 	wgpu::TextureDescriptor target_texture_desc{};
 	target_texture_desc.label = "render target";
 	target_texture_desc.dimension = wgpu::TextureDimension::_2D;
-	target_texture_desc.size = { 1280, 720, 1 };
+	target_texture_desc.size = { static_cast<uint32_t>(m_window_width - GUI_MENU_WIDTH), static_cast<uint32_t>(m_window_height), 1 };
 	target_texture_desc.format = m_swapchain_format;
 	target_texture_desc.mipLevelCount = 1;
 	target_texture_desc.sampleCount = 1;
@@ -440,8 +440,8 @@ bool Application::init_depthbuffer()
 	depthtexture_desc.format = m_depthtexture_format;
 	depthtexture_desc.mipLevelCount = 1;
 	depthtexture_desc.sampleCount = 1;
-	//depthtexture_desc.size = { static_cast<uint32_t>(m_window_width), static_cast<uint32_t>(m_window_height), 1 };
-	depthtexture_desc.size = { 1280, 720, 1 };
+	depthtexture_desc.size = { static_cast<uint32_t>(m_window_width - GUI_MENU_WIDTH), static_cast<uint32_t>(m_window_height), 1 };
+	//depthtexture_desc.size = { 1280, 720, 1 };
 	depthtexture_desc.usage = wgpu::TextureUsage::RenderAttachment;
 	depthtexture_desc.viewFormatCount = 1;
 	depthtexture_desc.viewFormats = (WGPUTextureFormat*)&m_depthtexture_format;
@@ -783,7 +783,7 @@ bool Application::init_k4a()
 	config.camera_fps = K4A_FRAMES_PER_SECOND_30;
 	config.depth_mode = K4A_DEPTH_MODE_WFOV_2X2BINNED;
 	config.color_format = K4A_IMAGE_FORMAT_COLOR_BGRA32;
-	config.color_resolution = K4A_COLOR_RESOLUTION_720P;
+	config.color_resolution = POINTCLOUD_TEXTURE_DIMENSION;
 	config.synchronized_images_only = true;
 
 	log("Started opening k4a device...");
@@ -793,7 +793,30 @@ bool Application::init_k4a()
 
 	log("Finished opening k4a device.");
 	
-	m_color_texture = Texture(m_device, m_queue, 1280, 720);
+	glm::uvec2 texture_dims;
+	switch (config.color_resolution) {
+		case K4A_COLOR_RESOLUTION_720P:
+			texture_dims = { 1280, 720 };
+			break;
+		case K4A_COLOR_RESOLUTION_1080P:
+			texture_dims = { 1920, 1080 };
+			break;
+		case K4A_COLOR_RESOLUTION_1440P:
+			texture_dims = { 2560, 1440 };
+			break;
+		case K4A_COLOR_RESOLUTION_1536P:
+			texture_dims = { 2048, 1536 };
+			break;
+		case K4A_COLOR_RESOLUTION_2160P:
+			texture_dims = { 3840, 2160 };
+			break;
+		case K4A_COLOR_RESOLUTION_3072P:
+			texture_dims = { 4096, 3072 };
+			break;
+		default:
+			break;
+	}
+	m_color_texture = Texture(m_device, m_queue, texture_dims.x, texture_dims.y);
 	
 	return true;
 }
@@ -857,10 +880,22 @@ void Application::render_state_capture()
 
 	ImGui::Begin("Camera Capture Window", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
 	ImGui::SetWindowPos({ GUI_MENU_WIDTH, 0.f });
-	ImGui::SetWindowSize({ m_window_width - GUI_MENU_WIDTH, (float)m_window_height });
+	ImGui::SetWindowSize({ (float)m_window_width - GUI_MENU_WIDTH, (float)m_window_height });
+	
+	ImVec2 viewport_dims = ImGui::GetContentRegionAvail();
+	ImVec2 image_dims = { (float)m_color_texture.width(), (float)m_color_texture.height() };
+	float image_aspect_ratio = image_dims.x / image_dims.y;
+	float viewport_aspect_ratio = viewport_dims.x / viewport_dims.y;
 
-	ImVec2 image_size(static_cast<float>(m_color_texture.width()), static_cast<float>(m_color_texture.height()));
-	ImGui::Image((ImTextureID)(intptr_t)m_color_texture.view(), image_size);
+	if (image_aspect_ratio > viewport_aspect_ratio) {
+		image_dims = { viewport_dims.x, viewport_dims.x / image_aspect_ratio };
+	}
+	else {
+		image_dims = { viewport_dims.y * image_aspect_ratio, viewport_dims.y };
+	}
+
+	ImGui::SetCursorPos({(viewport_dims.x - image_dims.x) * .5f, (viewport_dims.y - image_dims.y) * .5f });
+	ImGui::Image((ImTextureID)(intptr_t)m_color_texture.view(), image_dims);
 
 	ImGui::End();
 }
@@ -912,18 +947,18 @@ void Application::render_state_pointcloud()
 	renderpass.setBindGroup(0, m_bindgroup, 0, nullptr);
 	renderpass.draw(m_vertexcount, 1, 0, 0);
 
-
+	
 	ImGui::Begin("Pointcloud Window", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
 	ImGui::SetWindowPos({ GUI_MENU_WIDTH, 0.f });
 	ImGui::SetWindowSize({ m_window_width - GUI_MENU_WIDTH, (float)m_window_height });
 
-	ImGui::Image((ImTextureID)(intptr_t)m_rendertarget_texture_view, { 1280, 720 });
+	ImGui::Image((ImTextureID)(intptr_t)m_rendertarget_texture_view, { (float)m_window_width - GUI_MENU_WIDTH, (float)m_window_height - 20 });
 
 	// handle input
 	handle_pointcloud_mouse_events();
 
 	ImGui::End();
-
+	
 
 	renderpass.end();
 	renderpass.release();

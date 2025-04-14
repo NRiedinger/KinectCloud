@@ -10,6 +10,8 @@
 #define DEFAULT_WINDOW_W 1920
 #define DEFAULT_WINDOW_H 1080
 
+#define POINTCLOUD_TEXTURE_DIMENSION K4A_COLOR_RESOLUTION_1080P
+
 #define DEFAULT_WINDOW_TITLE "DepthSplat"
 
 #define GUI_MENU_WIDTH 500.f
@@ -127,6 +129,7 @@ private:
 	// camera capture
 	Texture m_color_texture;
 	k4a::device m_k4a_device;
+
 
 };
 
