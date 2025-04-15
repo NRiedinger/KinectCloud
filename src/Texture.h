@@ -13,7 +13,7 @@ public:
 	Texture(const Texture&) = delete;
 	Texture& operator=(const Texture&) = delete;
 
-	Texture(wgpu::Device device, wgpu::Queue queue, wgpu::Buffer* pixelbuffer, uint64_t pixelbuffer_size, int width, int height);
+	Texture(wgpu::Device device, wgpu::Queue queue, wgpu::Buffer* pixelbuffer, uint64_t pixelbuffer_size, int width, int height, wgpu::TextureFormat texture_format);
 	Texture(Texture&& other) noexcept;
 	Texture& operator=(Texture&& other) noexcept;
 
@@ -21,6 +21,7 @@ public:
 	
 
 	void update(const BgraPixel* data);
+	void update(const Depth16Pixel* data);
 	void delete_texture();
 	bool save_to_buffer(unsigned char** out_buffer_pointer);
 

@@ -355,7 +355,7 @@ void Application::render()
 		m_app_state = AppState::Capture;
 
 		if (!m_capture_sequence.is_initialized()) {
-			m_capture_sequence.on_init(m_camera.get_color_texture_ptr());
+			m_capture_sequence.on_init(m_camera.get_color_texture_ptr(), m_camera.get_depth_texture_ptr());
 		}
 		else {
 			m_capture_sequence.render_menu();

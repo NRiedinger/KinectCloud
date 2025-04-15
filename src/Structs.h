@@ -18,15 +18,19 @@
 #define GUI_MENU_WIDTH 500.f
 #define GUI_CONSOLE_HEIGHT 300.f
 
-#define POINTCLOUD_TEXTURE_DIMENSION K4A_COLOR_RESOLUTION_1080P
+#define POINTCLOUD_COLOR_RESOLUTION K4A_COLOR_RESOLUTION_1080P
+#define POINTCLOUD_DEPTH_MODE K4A_DEPTH_MODE_WFOV_2X2BINNED
 
 #define SWAPCHAIN_FORMAT wgpu::TextureFormat::BGRA8Unorm
 
 struct CameraCapture_t {
 	std::string name;
-	void* image_data;
-	int image_width;
-	int image_height;
+	void* image_color_data;
+	int image_color_width;
+	int image_color_height;
+	void* image_depth_data;
+	int image_depth_width;
+	int image_depth_height;
 };
 
 enum class AppState {
@@ -37,6 +41,10 @@ enum class AppState {
 
 struct BgraPixel {
 	uint8_t b, g, r, a;
+};
+
+struct Depth16Pixel {
+	uint16_t distance;
 };
 
 struct Point3D {

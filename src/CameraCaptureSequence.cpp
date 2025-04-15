@@ -10,11 +10,12 @@
 #define __STDC_LIB_EXT1__
 #include "utils/stb_image_write.h"
 
-bool CameraCaptureSequence::on_init(Texture* texture_pointer)
+bool CameraCaptureSequence::on_init(Texture* color_texture_pointer, Texture* depth_texture_pointer)
 {
     m_captures.clear();
     m_initialized = true;
-	m_texture_pointer = texture_pointer;
+	m_color_texture_pointer = color_texture_pointer;
+	m_depth_texture_pointer = depth_texture_pointer;
 
     return true;
 }
@@ -23,6 +24,23 @@ void CameraCaptureSequence::on_terminate()
 {
 	m_captures.clear();
     m_initialized = false;
+}
+
+void CameraCaptureSequence::on_capture()
+{
+	std::string capture_name = std::format("{}", m_captures.size());
+	std::string filepath = OUTPUT_DIR + std::format("/{}.png", capture_name);
+
+	CameraCapture_t capture{};
+	capture.name = capture_name;
+	capture.image_color_width = m_color_texture_pointer->width();
+	capture.image_color_height = m_color_texture_pointer->height();
+	m_color_texture_pointer->save_to_buffer((unsigned char**)&capture.image_color_data);
+	capture.image_depth_width = m_depth_texture_pointer->width();
+	capture.image_depth_height = m_depth_texture_pointer->height();
+	m_depth_texture_pointer->save_to_buffer((unsigned char**)&capture.image_depth_data);
+	
+	m_captures.push_back(capture);
 }
 
 bool CameraCaptureSequence::is_initialized()
@@ -60,14 +78,7 @@ void CameraCaptureSequence::render_menu()
 	ImGui::Separator();
 
 	if (ImGui::Button("Capture [space]") || ImGui::IsKeyPressed(ImGuiKey_Space)) {
-		std::string capture_name = std::format("{}", m_captures.size());
-		std::string filepath = OUTPUT_DIR + std::format("/{}.png", capture_name);
-		CameraCapture_t capture{};
-		capture.name = capture_name;
-		capture.image_width = m_texture_pointer->width();
-		capture.image_height = m_texture_pointer->height();
-		m_texture_pointer->save_to_buffer((unsigned char**) &capture.image_data);
-		m_captures.push_back(capture);
+		on_capture();
 	}
 	ImGui::SameLine();
 	if (ImGui::Button("Save")) {
@@ -86,11 +97,11 @@ void CameraCaptureSequence::save_sequence()
 		auto path = OUTPUT_DIR + std::format("/{}.png", capture.name);
 		bool success = !!stbi_write_png(
 			path.c_str(),
-			capture.image_width,
-			capture.image_height,
+			capture.image_color_width,
+			capture.image_color_height,
 			4,
-			capture.image_data,
-			4 * capture.image_width
+			capture.image_color_data,
+			4 * capture.image_color_width
 		);
 
 		if (!success) {
@@ -112,7 +123,7 @@ std::vector<std::string> CameraCaptureSequence::get_captures_names()
     result.resize(m_captures.size());
 
     std::transform(m_captures.begin(), m_captures.end(), result.begin(), [](CameraCapture_t capture) {
-		return std::format("{} [{}]", capture.name, capture.image_data);
+		return std::format("{} [{}]", capture.name, capture.image_color_data);
     });
 
     return result;

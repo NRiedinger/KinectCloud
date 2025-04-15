@@ -17,6 +17,7 @@ public:
 
 	void capture_point_cloud();
 	Texture* get_color_texture_ptr();
+	Texture* get_depth_texture_ptr();
 
 private:
 	void create_xy_table(const k4a::calibration* calibration, k4a::image xy_table);
@@ -31,9 +32,11 @@ private:
 
 	wgpu::Device m_device = NULL;
 	wgpu::Queue m_queue = NULL;
-	wgpu::Buffer m_pixelbuffer = NULL;
 	k4a::device m_k4a_device = NULL;
+	wgpu::Buffer m_pixelbuffer = NULL;
+	wgpu::Buffer m_depthbuffer = NULL;
 	Texture m_color_texture;
+	Texture m_depth_texture;
 	const std::chrono::milliseconds TIMEOUT_IN_MS = std::chrono::milliseconds(1000);
 };
 

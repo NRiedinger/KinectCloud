@@ -3,7 +3,7 @@
 #include <string>
 
 
-Texture::Texture(wgpu::Device device, wgpu::Queue queue, wgpu::Buffer* pixelbuffer, uint64_t pixelbuffer_size, int width, int height)
+Texture::Texture(wgpu::Device device, wgpu::Queue queue, wgpu::Buffer* pixelbuffer, uint64_t pixelbuffer_size, int width, int height, wgpu::TextureFormat texture_format = wgpu::TextureFormat::BGRA8Unorm)
     : m_width(width), 
     m_height(height),
     m_device(device),
@@ -19,7 +19,7 @@ Texture::Texture(wgpu::Device device, wgpu::Queue queue, wgpu::Buffer* pixelbuff
     texture_desc.size.width = static_cast<uint32_t>(m_width);
     texture_desc.size.height = static_cast<uint32_t>(m_height);
     texture_desc.size.depthOrArrayLayers = 1;
-    texture_desc.format = wgpu::TextureFormat::BGRA8Unorm;
+    texture_desc.format = texture_format;
     texture_desc.mipLevelCount = 1;
     texture_desc.sampleCount = 1;
     texture_desc.viewFormatCount = 0;
@@ -30,7 +30,7 @@ Texture::Texture(wgpu::Device device, wgpu::Queue queue, wgpu::Buffer* pixelbuff
     wgpu::TextureViewDescriptor view_desc{};
     view_desc.nextInChain = NULL;
     view_desc.label = NULL;
-    view_desc.format = wgpu::TextureFormat::BGRA8Unorm;
+    view_desc.format = texture_format;
     view_desc.dimension = wgpu::TextureViewDimension::_2D;
     view_desc.baseMipLevel = 0;
     view_desc.mipLevelCount = 1;
@@ -105,6 +105,30 @@ void Texture::update(const BgraPixel* data)
                          dataLayout,
                          extent);
 }
+
+void Texture::update(const Depth16Pixel* data) 
+{
+    wgpu::ImageCopyTexture imageCopyTexture = {};
+    imageCopyTexture.texture = m_texture;
+    imageCopyTexture.mipLevel = 0;
+    imageCopyTexture.origin = { 0, 0, 0 };
+
+    uint32_t bytesPerRow = static_cast<uint32_t>(m_width * sizeof(Depth16Pixel));
+
+    wgpu::TextureDataLayout dataLayout = {};
+    dataLayout.offset = 0;
+    dataLayout.bytesPerRow = bytesPerRow;
+    dataLayout.rowsPerImage = static_cast<uint32_t>(m_height);
+
+    wgpu::Extent3D extent = { static_cast<uint32_t>(m_width), static_cast<uint32_t>(m_height), 1 };
+
+    m_queue.writeTexture(imageCopyTexture,
+                         data,
+                         m_height * bytesPerRow,
+                         dataLayout,
+                         extent);
+}
+
 
 void Texture::delete_texture()
 {

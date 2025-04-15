@@ -38,9 +38,9 @@ bool Camera::on_init(wgpu::Device device, wgpu::Queue queue, int width, int heig
 
 	k4a_device_configuration_t config = K4A_DEVICE_CONFIG_INIT_DISABLE_ALL;
 	config.camera_fps = K4A_FRAMES_PER_SECOND_30;
-	config.depth_mode = K4A_DEPTH_MODE_WFOV_2X2BINNED;
+	config.depth_mode = POINTCLOUD_DEPTH_MODE;
 	config.color_format = K4A_IMAGE_FORMAT_COLOR_BGRA32;
-	config.color_resolution = POINTCLOUD_TEXTURE_DIMENSION;
+	config.color_resolution = POINTCLOUD_COLOR_RESOLUTION;
 	config.synchronized_images_only = true;
 
 	Logger::log("Started opening k4a device...");
@@ -50,39 +50,73 @@ bool Camera::on_init(wgpu::Device device, wgpu::Queue queue, int width, int heig
 
 	Logger::log("Finished opening k4a device.");
 
-	glm::uvec2 texture_dims;
+	glm::uvec2 color_texture_dims;
 	switch (config.color_resolution) {
 		case K4A_COLOR_RESOLUTION_720P:
-			texture_dims = { 1280, 720 };
+			color_texture_dims = { 1280, 720 };
 			break;
 		case K4A_COLOR_RESOLUTION_1080P:
-			texture_dims = { 1920, 1080 };
+			color_texture_dims = { 1920, 1080 };
 			break;
 		case K4A_COLOR_RESOLUTION_1440P:
-			texture_dims = { 2560, 1440 };
+			color_texture_dims = { 2560, 1440 };
 			break;
 		case K4A_COLOR_RESOLUTION_1536P:
-			texture_dims = { 2048, 1536 };
+			color_texture_dims = { 2048, 1536 };
 			break;
 		case K4A_COLOR_RESOLUTION_2160P:
-			texture_dims = { 3840, 2160 };
+			color_texture_dims = { 3840, 2160 };
 			break;
 		case K4A_COLOR_RESOLUTION_3072P:
-			texture_dims = { 4096, 3072 };
+			color_texture_dims = { 4096, 3072 };
 			break;
 		default:
 			break;
 	}
 
+
 	wgpu::BufferDescriptor pixelbuffer_desc = {};
 	pixelbuffer_desc.mappedAtCreation = false;
 	pixelbuffer_desc.usage = wgpu::BufferUsage::MapRead | wgpu::BufferUsage::CopyDst;
-	pixelbuffer_desc.size = 4 * texture_dims.x * texture_dims.y;
+	pixelbuffer_desc.size = 4 * color_texture_dims.x * color_texture_dims.y;
 	m_pixelbuffer = m_device.createBuffer(pixelbuffer_desc);
 	Logger::log(std::format("Save image pixel buffer: {}", (void*)&m_pixelbuffer));
 
-	m_color_texture = Texture(m_device, m_queue, &m_pixelbuffer, pixelbuffer_desc.size, texture_dims.x, texture_dims.y);
+	m_color_texture = Texture(m_device, m_queue, &m_pixelbuffer, pixelbuffer_desc.size, color_texture_dims.x, color_texture_dims.y, wgpu::TextureFormat::BGRA8Unorm);
 	Logger::log(std::format("Camera color texture: {}", (void*)&m_color_texture));
+
+
+	glm::uvec2 depth_texture_dims;
+	switch (config.depth_mode) {
+		case K4A_DEPTH_MODE_NFOV_2X2BINNED:
+			depth_texture_dims = { 320, 288 };
+			break;
+		case K4A_DEPTH_MODE_NFOV_UNBINNED:
+			depth_texture_dims = { 640, 576 };
+			break;
+		case K4A_DEPTH_MODE_WFOV_2X2BINNED:
+			depth_texture_dims = { 512, 512 };
+			break;
+		case K4A_DEPTH_MODE_WFOV_UNBINNED:
+			depth_texture_dims = { 1024, 1024 };
+			break;
+		case K4A_DEPTH_MODE_PASSIVE_IR:
+			depth_texture_dims = { 1024, 1024 };
+			break;
+		case K4A_DEPTH_MODE_OFF:
+		default:
+			break;
+	}
+
+	wgpu::BufferDescriptor depthbuffer_desc = {};
+	depthbuffer_desc.mappedAtCreation = false;
+	depthbuffer_desc.usage = wgpu::BufferUsage::MapRead | wgpu::BufferUsage::CopyDst;
+	depthbuffer_desc.size = 4 * depth_texture_dims.x * depth_texture_dims.y;
+	m_depthbuffer = m_device.createBuffer(depthbuffer_desc);
+	Logger::log(std::format("Save image depth buffer: {}", (void*)&m_depthbuffer));
+
+	m_depth_texture = Texture(m_device, m_queue, &m_depthbuffer, depthbuffer_desc.size, depth_texture_dims.x, depth_texture_dims.y, wgpu::TextureFormat::Depth16Unorm);
+	Logger::log(std::format("Camera depth texture: {}", (void*)&m_depth_texture));
 
 	m_initialized = true;
 	
@@ -94,8 +128,10 @@ void Camera::on_frame()
 	k4a::capture capture;
 	if (m_k4a_device.get_capture(&capture, std::chrono::milliseconds(0))) {
 		const k4a::image color_image = capture.get_color_image();
+		const k4a::image depth_image = capture.get_depth_image();
 
 		m_color_texture.update(reinterpret_cast<const BgraPixel*>(color_image.get_buffer()));
+		m_depth_texture.update(reinterpret_cast<const Depth16Pixel*>(depth_image.get_buffer()));
 	}
 
 	ImGui::Begin("Camera Capture Window", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
@@ -182,6 +218,11 @@ void Camera::capture_point_cloud()
 Texture* Camera::get_color_texture_ptr()
 {
 	return &m_color_texture;
+}
+
+Texture* Camera::get_depth_texture_ptr()
+{
+	return &m_depth_texture;
 }
 
 void Camera::create_xy_table(const k4a::calibration* calibration, k4a::image xy_table)
