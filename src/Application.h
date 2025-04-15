@@ -8,7 +8,7 @@
 #include "Texture.h"
 #include "Camera.h"
 #include "PointcloudRenderer.h"
-
+#include "CameraCaptureSequence.h"
 
 
 #pragma once
@@ -36,15 +36,19 @@ private:
 	void after_frame();
 	void render();
 
-
-
 private:
 	std::string m_window_title = DEFAULT_WINDOW_TITLE;
 	int m_window_width = DEFAULT_WINDOW_W;
 	int m_window_height = DEFAULT_WINDOW_H;
 	bool m_is_minimized = false;
 
+	AppState m_app_state = AppState::Default;
+	Camera m_camera;
+	PointcloudRenderer m_renderer;
+	CameraCaptureSequence m_capture_sequence;
+
 	GLFWwindow* m_window = nullptr;
+
 	wgpu::Device m_device = nullptr;
 	wgpu::Surface m_surface = nullptr;
 	wgpu::Instance m_instance = nullptr;
@@ -58,18 +62,5 @@ private:
 	wgpu::TextureFormat m_swapchain_format = SWAPCHAIN_FORMAT;
 	wgpu::SwapChain m_swapchain = nullptr;
 	wgpu::TextureView m_next_texture = nullptr;
-
-	// depth buffer
-	wgpu::TextureFormat m_depthtexture_format = wgpu::TextureFormat::Depth24Plus;
-	wgpu::Texture m_depthtexture = nullptr;
-	wgpu::TextureView m_depthtexture_view = nullptr;
-
-
-	AppState m_app_state = AppState::Pointcloud;
-
-	// camera capture
-	Camera m_camera;
-
-	PointcloudRenderer m_renderer;
 };
 

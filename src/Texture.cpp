@@ -1,10 +1,5 @@
 #include "Texture.h"
 
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#define __STDC_LIB_EXT1__
-#include "utils/stb_image_write.h"
-
-
 #include <string>
 
 
@@ -117,7 +112,7 @@ void Texture::delete_texture()
     m_texture_view = nullptr;
 }
 
-bool Texture::save_to_file(const std::filesystem::path path)
+bool Texture::save_to_buffer(unsigned char** out_buffer_pointer)
 {
     wgpu::CommandEncoderDescriptor command_encoder_desc{};
     command_encoder_desc.label = "save texture command encoder";
@@ -125,12 +120,14 @@ bool Texture::save_to_file(const std::filesystem::path path)
 
     wgpu::ImageCopyTexture source{};
     source.texture = m_texture;
+
     wgpu::ImageCopyBuffer destination = wgpu::Default;
     destination.buffer = *m_pixelbuffer;
     destination.layout.bytesPerRow = 4 * m_width;
     destination.layout.offset = 0;
     destination.layout.rowsPerImage = m_height;
-    encoder.copyTextureToBuffer(source, destination, { (uint32_t)m_width, (uint32_t)m_height, 1 });
+
+    encoder.copyTextureToBuffer(source, destination, { static_cast<uint32_t>(m_width), static_cast<uint32_t>(m_height), 1 });
 
     wgpu::Queue queue = m_device.getQueue();
 
@@ -152,13 +149,20 @@ bool Texture::save_to_file(const std::filesystem::path path)
             return;
         }
 
-        unsigned char* pixeldata = (unsigned char*)m_pixelbuffer->getConstMappedRange(0, m_pixelbuffer_size);
-        int bytes_per_row = 4 * m_width;
-        int success = stbi_write_png(path.string().c_str(), (int)m_width, (int)m_height, 4, pixeldata, bytes_per_row);
+        auto mapped_range = m_pixelbuffer->getConstMappedRange(0, m_pixelbuffer_size);
+        if (!mapped_range) {
+            failed = true;
+        }
+        else {
+            *out_buffer_pointer = new unsigned char[m_pixelbuffer_size];
+            std::memcpy(*out_buffer_pointer, mapped_range, m_pixelbuffer_size);
+        }
+        //unsigned char* pixeldata = (unsigned char*)m_pixelbuffer->getConstMappedRange(0, m_pixelbuffer_size);
+        //*out_buffer_pointer = (unsigned char*)m_pixelbuffer->getConstMappedRange(0, m_pixelbuffer_size);
+        //int bytes_per_row = 4 * m_width;
+        //int success = stbi_write_png(path.string().c_str(), (int)m_width, (int)m_height, 4, pixeldata, bytes_per_row);
 
         m_pixelbuffer->unmap();
-
-        failed = success == 0;
         done = true;
     });
 

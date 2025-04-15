@@ -38,7 +38,11 @@ set(SOURCES
 	src/PointcloudRenderer.h
 	src/PointcloudRenderer.cpp
 	
+	src/Darkmode.h
+	src/Darkmode.cpp
+	
 	src/Structs.h
+	
 	
 	# utils
 	src/utils/implementations.cpp

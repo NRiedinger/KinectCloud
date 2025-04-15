@@ -40,7 +40,7 @@ private:
 	
 
 private:
-	bool m_is_initialized = false;
+	bool m_initialized = false;
 	int m_width;
 	int m_height;
 

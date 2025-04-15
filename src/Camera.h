@@ -17,7 +17,6 @@ public:
 
 	void capture_point_cloud();
 	Texture* get_color_texture_ptr();
-	bool save_to_file(const std::filesystem::path path);
 
 private:
 	void create_xy_table(const k4a::calibration* calibration, k4a::image xy_table);
@@ -26,7 +25,7 @@ private:
 
 
 private:
-	bool m_is_initialized = false;
+	bool m_initialized = false;
 	int m_width;
 	int m_height;
 

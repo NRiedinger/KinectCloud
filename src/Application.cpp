@@ -11,16 +11,14 @@
 #include "utils/glfw3webgpu.h"
 #include "ResourceManager.h"
 #include "Logger.h"
-
-
+#include "Darkmode.h"
 
 Application::Application()
 {
 }
 
 bool Application::on_init()
-{
-
+{	
 	if (!init_window_and_device())
 		return false;
 
@@ -75,10 +73,10 @@ void Application::on_resize()
 	init_swapchain();
 
 	if (m_camera.is_initialized())
-		m_camera.on_resize(m_window_width - GUI_MENU_WIDTH, m_window_height);
+		m_camera.on_resize(m_window_width - GUI_MENU_WIDTH, m_window_height - GUI_CONSOLE_HEIGHT);
 
 	if (m_renderer.is_initialized())
-		m_renderer.on_resize(m_window_width - GUI_MENU_WIDTH, m_window_height);
+		m_renderer.on_resize(m_window_width - GUI_MENU_WIDTH, m_window_height - GUI_CONSOLE_HEIGHT);
 }
 
 bool Application::init_window_and_device()
@@ -97,37 +95,38 @@ bool Application::init_window_and_device()
 
 	m_instance = wgpu::createInstance(instance_desc);
 	if (!m_instance) {
-		log("Could not initialize WebGPU!", LoggingSeverity::Error);
+		Logger::log("Could not initialize WebGPU!", LoggingSeverity::Error);
 		return false;
 	}
 
 
 	// init GLFW
 	if (!glfwInit()) {
-		log("Could not initialize GLFW!", LoggingSeverity::Error);
+		Logger::log("Could not initialize GLFW!", LoggingSeverity::Error);
 		return false;
 	}
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 	m_window = glfwCreateWindow(m_window_width, m_window_height, m_window_title.c_str(), NULL, NULL);
 	if (!m_window) {
-		log("Could not open window!", LoggingSeverity::Error);
+		Logger::log("Could not open window!", LoggingSeverity::Error);
 		return false;
 	}
+	set_darkmode(m_window);
 
 	// create surface and adapter
-	log("Requesting adapter...");
+	Logger::log("Requesting adapter...");
 	m_surface = glfwCreateWindowWGPUSurface(m_instance, m_window);
 	if (!m_surface) {
-		log("Could not create surface!", LoggingSeverity::Error);
+		Logger::log("Could not create surface!", LoggingSeverity::Error);
 		return false;
 	}
 	wgpu::RequestAdapterOptions adapterOpts{};
 	adapterOpts.compatibleSurface = m_surface;
 	wgpu::Adapter adapter = m_instance.requestAdapter(adapterOpts);
-	log(std::format("Got adapter: {}", (void*)adapter));
+	Logger::log(std::format("Got adapter: {}", (void*)adapter));
 
-	log("Requesting device...");
+	Logger::log("Requesting device...");
 	wgpu::SupportedLimits supported_limits;
 	adapter.getLimits(&supported_limits);
 	wgpu::RequiredLimits required_limits = wgpu::Default;
@@ -156,10 +155,10 @@ bool Application::init_window_and_device()
 	device_desc.defaultQueue.label = "default queue";
 	m_device = adapter.requestDevice(device_desc);
 	if (!m_device) {
-		log("Could not request device!", LoggingSeverity::Error);
+		Logger::log("Could not request device!", LoggingSeverity::Error);
 		return false;
 	}
-	log(std::format("Got device: {}", (void*)m_device));
+	Logger::log(std::format("Got device: {}", (void*)m_device));
 
 	// error callback for more debug info
 	m_uncaptured_error_callback = m_device.setUncapturedErrorCallback([](wgpu::ErrorType type, char const* message) {
@@ -210,7 +209,7 @@ void Application::terminate_window_and_device()
 
 bool Application::init_swapchain()
 {
-	log("Creating swapchain...");
+	Logger::log("Creating swapchain...");
 	wgpu::SwapChainDescriptor swapchain_desc{};
 	swapchain_desc.width = static_cast<uint32_t>(m_window_width);
 	swapchain_desc.height = static_cast<uint32_t>(m_window_height);
@@ -220,10 +219,10 @@ bool Application::init_swapchain()
 	swapchain_desc.presentMode = wgpu::PresentMode::Mailbox;
 	m_swapchain = m_device.createSwapChain(m_surface, swapchain_desc);
 	if (!m_swapchain) {
-		log("Could not create swapchain!", LoggingSeverity::Error);
+		Logger::log("Could not create swapchain!", LoggingSeverity::Error);
 		return false;
 	}
-	log(std::format("Swapchain: {}", (void*)m_swapchain));
+	Logger::log(std::format("Swapchain: {}", (void*)m_swapchain));
 	
 	return true;
 }
@@ -243,7 +242,7 @@ bool Application::init_gui()
 	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
 	if (!ImGui_ImplGlfw_InitForOther(m_window, true)) {
-		log("Cannot initialize Dear ImGui for GLFW!", LoggingSeverity::Error);
+		Logger::log("Cannot initialize Dear ImGui for GLFW!", LoggingSeverity::Error);
 		return false;
 	}
 
@@ -252,7 +251,7 @@ bool Application::init_gui()
 	initInfo.RenderTargetFormat = m_swapchain_format;
 	initInfo.NumFramesInFlight = 3;
 	if (!ImGui_ImplWGPU_Init(&initInfo)) {
-		log("Cannot initialize Dear ImGui for WebGPU!", LoggingSeverity::Error);
+		Logger::log("Cannot initialize Dear ImGui for WebGPU!", LoggingSeverity::Error);
 		return false;
 	}
 
@@ -272,7 +271,7 @@ void Application::before_frame()
 {
 	m_next_texture = m_swapchain.getCurrentTextureView();
 	if (!m_next_texture) {
-		log("Cannot get next swap chain texture!", LoggingSeverity::Error);
+		Logger::log("Cannot get next swap chain texture!", LoggingSeverity::Error);
 		return;
 	}
 
@@ -330,44 +329,40 @@ void Application::after_frame()
 
 void Application::render()
 {
-	ImGui::Begin("Yep", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
+	ImGui::Begin("Menu", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
 	ImGui::SetWindowPos({ 0.f, 0.f });
 	ImGui::SetWindowSize({ GUI_MENU_WIDTH, (float)m_window_height });
 
 
-	const char* items[] = { "Capture", "Pointcloud" };
-	static const char* current_item = "Select";
-	if (ImGui::BeginCombo("Mode", current_item)) {
-		for (int i = 0; i < IM_ARRAYSIZE(items); i++) {
-			bool is_selected = current_item == items[i];
-			if (ImGui::Selectable(items[i], is_selected)) {
-				current_item = items[i];
+	static const char* select_mode_items[] = { "Capture", "Pointcloud" };
+	static const char* current_select_mode_item = "Select";
+	if (ImGui::BeginCombo("Mode", current_select_mode_item)) {
+		for (int i = 0; i < IM_ARRAYSIZE(select_mode_items); i++) {
+			bool is_selected = current_select_mode_item == select_mode_items[i];
+			if (ImGui::Selectable(select_mode_items[i], is_selected)) {
+				current_select_mode_item = select_mode_items[i];
 			}
 			if (is_selected) {
 				ImGui::SetItemDefaultFocus();
 			}
 		}
 		ImGui::EndCombo();
-
-
 	}
-	if (strcmp(current_item, "Capture") == 0) {
+
+	ImGui::Separator();
+
+	if (strcmp(current_select_mode_item, "Capture") == 0) {
 		m_app_state = AppState::Capture;
 
-		if (ImGui::Button("Klick") || ImGui::IsKeyPressed(ImGuiKey_Space)) {
-			std::string filename = OUTPUT_DIR + std::format("/{}.png", (int)(glfwGetTime() * 1000));
-			
-			if (m_camera.save_to_file(filename)) {
-				log("Successfully saved " + filename);
-			} 
-			else {
-				log("Failed to save " + filename, LoggingSeverity::Error);
-			}
+		if (!m_capture_sequence.is_initialized()) {
+			m_capture_sequence.on_init(m_camera.get_color_texture_ptr());
 		}
-		ImGui::SameLine();
-		ImGui::Text(" or press [space] to capture image");
+		else {
+			m_capture_sequence.render_menu();
+		}
+		
 	}
-	else if (strcmp(current_item, "Pointcloud") == 0) {
+	else if (strcmp(current_select_mode_item, "Pointcloud") == 0) {
 		m_app_state = AppState::Pointcloud;
 	}
 	else {
@@ -380,7 +375,7 @@ void Application::render()
 	switch (m_app_state) {
 		case AppState::Capture:
 			if (!m_camera.is_initialized()) {
-				m_camera.on_init(m_device, m_queue, m_window_width - GUI_MENU_WIDTH, m_window_height);
+				m_camera.on_init(m_device, m_queue, m_window_width - GUI_MENU_WIDTH, m_window_height - GUI_CONSOLE_HEIGHT);
 			}
 			else {
 				m_camera.on_frame();
@@ -389,7 +384,7 @@ void Application::render()
 			break;
 		case AppState::Pointcloud:
 			if (!m_renderer.is_initialized()) {
-				m_renderer.on_init(m_device, m_queue, m_window_width - GUI_MENU_WIDTH, m_window_height);
+				m_renderer.on_init(m_device, m_queue, m_window_width - GUI_MENU_WIDTH, m_window_height - GUI_CONSOLE_HEIGHT);
 			}
 			else {
 				m_renderer.on_frame();
@@ -400,5 +395,24 @@ void Application::render()
 		default:
 			break;
 	}
+
+	// render console
+
+	ImGui::Begin("Console", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
+	ImGui::SetWindowPos({ GUI_MENU_WIDTH, m_window_height - GUI_CONSOLE_HEIGHT });
+	ImGui::SetWindowSize({ m_window_width - GUI_MENU_WIDTH, GUI_CONSOLE_HEIGHT });
+	
+	ImGui::BeginChild("ScrollingRegion", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
+
+	ImGui::TextUnformatted(Logger::s_buffer.str().c_str());
+
+	if (Logger::s_updated) {
+		ImGui::SetScrollHereY(1.0);
+		Logger::s_updated = false;
+	}
+	
+	ImGui::EndChild();
+
+	ImGui::End();
 }
 

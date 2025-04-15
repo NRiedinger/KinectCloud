@@ -41,7 +41,7 @@ bool PointcloudRenderer::on_init(wgpu::Device device, wgpu::Queue queue, int wid
 	if (!init_bindgroup())
 		return false;
 
-	m_is_initialized = true;
+	m_initialized = true;
 
 	return true;
 }
@@ -53,7 +53,7 @@ void PointcloudRenderer::on_terminate()
 	terminate_renderpipeline();
 	terminate_depthbuffer();
 
-	m_is_initialized = false;
+	m_initialized = false;
 }
 
 void PointcloudRenderer::on_resize(int width, int height)
@@ -69,7 +69,7 @@ void PointcloudRenderer::on_resize(int width, int height)
 
 bool PointcloudRenderer::is_initialized()
 {
-	return m_is_initialized;
+	return m_initialized;
 }
 
 bool PointcloudRenderer::init_pointcloud()
@@ -117,13 +117,13 @@ bool PointcloudRenderer::init_pointcloud()
 
 	m_vertexbuffer = m_device.createBuffer(bufferDesc);
 	if (!m_vertexbuffer) {
-		log("Could not create vertex buffer!", LoggingSeverity::Error);
+		Logger::log("Could not create vertex buffer!", LoggingSeverity::Error);
 		return false;
 	}
 	m_queue.writeBuffer(m_vertexbuffer, 0, vertexData.data(), bufferDesc.size);
 
-	log(std::format("Vertex buffer: {}", (void*)m_vertexbuffer));
-	log(std::format("Vertex count: {}", m_vertexcount));
+	Logger::log(std::format("Vertex buffer: {}", (void*)m_vertexbuffer));
+	Logger::log(std::format("Vertex count: {}", m_vertexcount));
 
 	return true;
 }
@@ -137,15 +137,15 @@ void PointcloudRenderer::terminate_pointcloud()
 
 bool PointcloudRenderer::init_renderpipeline()
 {
-	log("Creating shader module...");
+	Logger::log("Creating shader module...");
 	m_rendershader_module = ResourceManager::load_shadermodule(RESOURCE_DIR "/shader.wgsl", m_device);
 	if (!m_rendershader_module) {
-		log("Could not create render shader module!", LoggingSeverity::Error);
+		Logger::log("Could not create render shader module!", LoggingSeverity::Error);
 		return false;
 	}
-	log(std::format("Render shader module: {}", (void*)m_rendershader_module));
+	Logger::log(std::format("Render shader module: {}", (void*)m_rendershader_module));
 
-	log("Creating render pipeline...");
+	Logger::log("Creating render pipeline...");
 	wgpu::RenderPipelineDescriptor renderpipeline_desc{};
 
 	std::vector<wgpu::VertexAttribute> vertex_attribs(4);
@@ -243,7 +243,7 @@ bool PointcloudRenderer::init_renderpipeline()
 	bindgroup_layout_desc.entries = &bindgroup_layout_entry;
 	m_bindgroup_layout = m_device.createBindGroupLayout(bindgroup_layout_desc);
 	if (!m_bindgroup_layout) {
-		log("Could not create bind group layout!", LoggingSeverity::Error);
+		Logger::log("Could not create bind group layout!", LoggingSeverity::Error);
 		return false;
 	}
 
@@ -255,17 +255,17 @@ bool PointcloudRenderer::init_renderpipeline()
 
 	wgpu::PipelineLayout pipeline_layout = m_device.createPipelineLayout(renderpipeline_layout_desc);
 	if (!pipeline_layout) {
-		log("Could not create pipeline layout!", LoggingSeverity::Error);
+		Logger::log("Could not create pipeline layout!", LoggingSeverity::Error);
 		return false;
 	}
 	renderpipeline_desc.layout = pipeline_layout;
 
 	m_renderpipeline = m_device.createRenderPipeline(renderpipeline_desc);
 	if (!m_renderpipeline) {
-		log("Could not create render pipeline!", LoggingSeverity::Error);
+		Logger::log("Could not create render pipeline!", LoggingSeverity::Error);
 		return false;
 	}
-	log(std::format("Render pipeline: {}", (void*)m_renderpipeline));
+	Logger::log(std::format("Render pipeline: {}", (void*)m_renderpipeline));
 
 	return true;
 }
@@ -335,7 +335,7 @@ void PointcloudRenderer::terminate_bindgroup()
 
 bool PointcloudRenderer::init_depthbuffer()
 {
-	log("Initializing depth buffer...");
+	Logger::log("Initializing depth buffer...");
 	wgpu::TextureDescriptor depthtexture_desc{};
 	depthtexture_desc.dimension = wgpu::TextureDimension::_2D;
 	depthtexture_desc.format = m_depthtexture_format;
@@ -347,10 +347,10 @@ bool PointcloudRenderer::init_depthbuffer()
 	depthtexture_desc.viewFormats = (WGPUTextureFormat*)&m_depthtexture_format;
 	m_depthtexture = m_device.createTexture(depthtexture_desc);
 	if (!m_depthtexture) {
-		log("Could not create depth texture!", LoggingSeverity::Error);
+		Logger::log("Could not create depth texture!", LoggingSeverity::Error);
 		return false;
 	}
-	log(std::format("Depth texture: {}", (void*)m_depthtexture));
+	Logger::log(std::format("Depth texture: {}", (void*)m_depthtexture));
 
 	wgpu::TextureViewDescriptor depthtexture_view_desc{};
 	depthtexture_view_desc.aspect = wgpu::TextureAspect::DepthOnly;
@@ -362,10 +362,10 @@ bool PointcloudRenderer::init_depthbuffer()
 	depthtexture_view_desc.format = m_depthtexture_format;
 	m_depthtexture_view = m_depthtexture.createView(depthtexture_view_desc);
 	if (!m_depthtexture_view) {
-		log("Could not create depth texture view!", LoggingSeverity::Error);
+		Logger::log("Could not create depth texture view!", LoggingSeverity::Error);
 		return false;
 	}
-	log(std::format("Depth texture view: {}", (void*)m_depthtexture_view));
+	Logger::log(std::format("Depth texture view: {}", (void*)m_depthtexture_view));
 
 	return true;
 }
@@ -391,10 +391,10 @@ bool PointcloudRenderer::init_rendertarget()
 	target_texture_desc.viewFormatCount = 0;
 	m_rendertarget_texture = m_device.createTexture(target_texture_desc);
 	if (!m_rendertarget_texture) {
-		log("Could not create rendertarget texture!", LoggingSeverity::Error);
+		Logger::log("Could not create rendertarget texture!", LoggingSeverity::Error);
 		return false;
 	}
-	log(std::format("Rendertarget texture: {}", (void*)m_rendertarget_texture));
+	Logger::log(std::format("Rendertarget texture: {}", (void*)m_rendertarget_texture));
 
 	wgpu::TextureViewDescriptor texture_view_desc{};
 	texture_view_desc.label = "render texture view";
@@ -405,10 +405,10 @@ bool PointcloudRenderer::init_rendertarget()
 	texture_view_desc.aspect = wgpu::TextureAspect::All;
 	m_rendertarget_texture_view = wgpuTextureCreateView(m_rendertarget_texture, &texture_view_desc);
 	if (!m_rendertarget_texture_view) {
-		log("Could not create rendertarget texture view!", LoggingSeverity::Error);
+		Logger::log("Could not create rendertarget texture view!", LoggingSeverity::Error);
 		return false;
 	}
-	log(std::format("Rendertarget texture view: {}", (void*)m_rendertarget_texture_view));
+	Logger::log(std::format("Rendertarget texture view: {}", (void*)m_rendertarget_texture_view));
 
 	return true;
 }

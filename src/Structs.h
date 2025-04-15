@@ -16,12 +16,18 @@
 #define DEFAULT_WINDOW_H 1080
 
 #define GUI_MENU_WIDTH 500.f
+#define GUI_CONSOLE_HEIGHT 300.f
 
 #define POINTCLOUD_TEXTURE_DIMENSION K4A_COLOR_RESOLUTION_1080P
 
 #define SWAPCHAIN_FORMAT wgpu::TextureFormat::BGRA8Unorm
 
-
+struct CameraCapture_t {
+	std::string name;
+	void* image_data;
+	int image_width;
+	int image_height;
+};
 
 enum class AppState {
 	Default,

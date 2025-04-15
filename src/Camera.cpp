@@ -32,7 +32,7 @@ bool Camera::on_init(wgpu::Device device, wgpu::Queue queue, int width, int heig
 	const uint32_t device_count = k4a::device::get_installed_count();
 	if (device_count < 1)
 	{
-		log("No Azure Kinect devices detected!", LoggingSeverity::Error);
+		Logger::log("No Azure Kinect devices detected!", LoggingSeverity::Error);
 		throw std::runtime_error("No Azure Kinect devices detected!");
 	}
 
@@ -43,12 +43,12 @@ bool Camera::on_init(wgpu::Device device, wgpu::Queue queue, int width, int heig
 	config.color_resolution = POINTCLOUD_TEXTURE_DIMENSION;
 	config.synchronized_images_only = true;
 
-	log("Started opening k4a device...");
+	Logger::log("Started opening k4a device...");
 
 	m_k4a_device = k4a::device::open(K4A_DEVICE_DEFAULT);
 	m_k4a_device.start_cameras(&config);
 
-	log("Finished opening k4a device.");
+	Logger::log("Finished opening k4a device.");
 
 	glm::uvec2 texture_dims;
 	switch (config.color_resolution) {
@@ -79,12 +79,12 @@ bool Camera::on_init(wgpu::Device device, wgpu::Queue queue, int width, int heig
 	pixelbuffer_desc.usage = wgpu::BufferUsage::MapRead | wgpu::BufferUsage::CopyDst;
 	pixelbuffer_desc.size = 4 * texture_dims.x * texture_dims.y;
 	m_pixelbuffer = m_device.createBuffer(pixelbuffer_desc);
-	log(std::format("Save image pixel buffer: {}", (void*)&m_pixelbuffer));
+	Logger::log(std::format("Save image pixel buffer: {}", (void*)&m_pixelbuffer));
 
 	m_color_texture = Texture(m_device, m_queue, &m_pixelbuffer, pixelbuffer_desc.size, texture_dims.x, texture_dims.y);
-	log(std::format("Camera color texture: {}", (void*)&m_color_texture));
+	Logger::log(std::format("Camera color texture: {}", (void*)&m_color_texture));
 
-	m_is_initialized = true;
+	m_initialized = true;
 	
 	return true;
 }
@@ -129,7 +129,7 @@ void Camera::on_terminate()
 
 bool Camera::is_initialized()
 {
-	return m_is_initialized;
+	return m_initialized;
 }
 
 void Camera::on_resize(int width, int height)
@@ -182,11 +182,6 @@ void Camera::capture_point_cloud()
 Texture* Camera::get_color_texture_ptr()
 {
 	return &m_color_texture;
-}
-
-bool Camera::save_to_file(const std::filesystem::path path)
-{
-	return m_color_texture.save_to_file(path);
 }
 
 void Camera::create_xy_table(const k4a::calibration* calibration, k4a::image xy_table)

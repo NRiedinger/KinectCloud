@@ -2,7 +2,8 @@
 
 #include <iostream>
 
-void log(std::string message, LoggingSeverity severity)
+
+void Logger::log(std::string message, LoggingSeverity severity)
 {
 #ifdef NDEBUG
 	return;
@@ -10,15 +11,17 @@ void log(std::string message, LoggingSeverity severity)
 
 	switch (severity) {
 		case LoggingSeverity::Info:
-			std::cout << ">> " << message << std::endl;
+			s_buffer << ">> " << message << std::endl;
 			break;
 		case LoggingSeverity::Warning:
-			std::cout << ">> [WARNING]: " << message << std::endl;
+			s_buffer << ">> [WARNING]: " << message << std::endl;
 			break;
 		case LoggingSeverity::Error:
-			std::cerr << ">> [ERROR]: " << message << std::endl;
+			s_buffer << ">> [ERROR]: " << message << std::endl;
 			break;
 		default:
 			break;
 	}
+
+	s_updated = true;
 }

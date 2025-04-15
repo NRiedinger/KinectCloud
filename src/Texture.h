@@ -3,6 +3,7 @@
 #include <k4a/k4a.hpp>
 #include "Structs.h"
 
+
 #include <filesystem>
 
 #pragma once
@@ -21,7 +22,7 @@ public:
 
 	void update(const BgraPixel* data);
 	void delete_texture();
-	bool save_to_file(const std::filesystem::path path);
+	bool save_to_buffer(unsigned char** out_buffer_pointer);
 
 
 	inline int width() const {
