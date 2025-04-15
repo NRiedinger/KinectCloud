@@ -44,8 +44,6 @@ Texture::Texture(wgpu::Device device, wgpu::Queue queue, wgpu::Buffer* pixelbuff
     view_desc.aspect = wgpu::TextureAspect::All;
 
     m_texture_view = wgpuTextureCreateView(m_texture, &view_desc);
-
-    std::cout << "asdfsaf " << m_pixelbuffer << std::endl;
 }
 
 Texture::Texture(Texture&& other) noexcept 

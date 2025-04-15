@@ -23,17 +23,22 @@ set(SOURCES
 	src/ResourceManager.cpp
 	src/ResourceManager.h
 	
-	src/GaussianModel.cpp
-	src/GaussianModel.h
-	
 	src/Camera.h
 	src/Camera.cpp
 	
 	src/Texture.h
 	src/Texture.cpp
 	
+	src/CameraCaptureSequence.h
+	src/CameraCaptureSequence.cpp
+	
+	src/Logger.h
+	src/Logger.cpp
+	
+	src/PointcloudRenderer.h
+	src/PointcloudRenderer.cpp
+	
 	src/Structs.h
-	src/Helpers.h
 	
 	# utils
 	src/utils/implementations.cpp
@@ -41,12 +46,6 @@ set(SOURCES
 	src/utils/glfw3webgpu.c
 	src/utils/glfw3webgpu.h
 	src/utils/stb_image_write.h
-	
-	# gpu.cpp
-	src/gpu.cpp/gpu.h
-	src/gpu.cpp/half.h
-	src/gpu.cpp/half.cpp
-	src/gpu.cpp/logging.h
 )
 add_executable(App ${SOURCES})
 

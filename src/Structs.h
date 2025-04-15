@@ -8,11 +8,20 @@
 #include <glm/gtx/quaternion.hpp>
 
 #pragma once
-enum class LoggingSeverity {
-	Info,
-	Warning,
-	Error
-};
+
+
+#define DEFAULT_WINDOW_TITLE "DepthSplat"
+
+#define DEFAULT_WINDOW_W 1920
+#define DEFAULT_WINDOW_H 1080
+
+#define GUI_MENU_WIDTH 500.f
+
+#define POINTCLOUD_TEXTURE_DIMENSION K4A_COLOR_RESOLUTION_1080P
+
+#define SWAPCHAIN_FORMAT wgpu::TextureFormat::BGRA8Unorm
+
+
 
 enum class AppState {
 	Default,

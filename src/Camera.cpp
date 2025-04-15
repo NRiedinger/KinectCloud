@@ -1,5 +1,11 @@
 #include "Camera.h"
 
+#include "Logger.h"
+#include "Structs.h"
+
+#include <glm/glm.hpp>
+#include <glm/ext.hpp>
+#include <imgui.h>
 
 #include <fstream>
 #include <iostream>
@@ -8,18 +14,128 @@
 
 Camera::Camera()
 {
-	if (k4a::device::get_installed_count() < 1) {
-		throw std::exception("No k4a devices found!");
-	}
 
-	m_device = k4a::device::open(K4A_DEVICE_DEFAULT);
 }
 
 Camera::~Camera()
 {
-	if (m_device) {
-		m_device.close();
+	on_terminate();
+}
+
+bool Camera::on_init(wgpu::Device device, wgpu::Queue queue, int width, int height)
+{
+	m_device = device;
+	m_queue = queue;
+	m_width = width;
+	m_height = height;
+	
+	const uint32_t device_count = k4a::device::get_installed_count();
+	if (device_count < 1)
+	{
+		log("No Azure Kinect devices detected!", LoggingSeverity::Error);
+		throw std::runtime_error("No Azure Kinect devices detected!");
 	}
+
+	k4a_device_configuration_t config = K4A_DEVICE_CONFIG_INIT_DISABLE_ALL;
+	config.camera_fps = K4A_FRAMES_PER_SECOND_30;
+	config.depth_mode = K4A_DEPTH_MODE_WFOV_2X2BINNED;
+	config.color_format = K4A_IMAGE_FORMAT_COLOR_BGRA32;
+	config.color_resolution = POINTCLOUD_TEXTURE_DIMENSION;
+	config.synchronized_images_only = true;
+
+	log("Started opening k4a device...");
+
+	m_k4a_device = k4a::device::open(K4A_DEVICE_DEFAULT);
+	m_k4a_device.start_cameras(&config);
+
+	log("Finished opening k4a device.");
+
+	glm::uvec2 texture_dims;
+	switch (config.color_resolution) {
+		case K4A_COLOR_RESOLUTION_720P:
+			texture_dims = { 1280, 720 };
+			break;
+		case K4A_COLOR_RESOLUTION_1080P:
+			texture_dims = { 1920, 1080 };
+			break;
+		case K4A_COLOR_RESOLUTION_1440P:
+			texture_dims = { 2560, 1440 };
+			break;
+		case K4A_COLOR_RESOLUTION_1536P:
+			texture_dims = { 2048, 1536 };
+			break;
+		case K4A_COLOR_RESOLUTION_2160P:
+			texture_dims = { 3840, 2160 };
+			break;
+		case K4A_COLOR_RESOLUTION_3072P:
+			texture_dims = { 4096, 3072 };
+			break;
+		default:
+			break;
+	}
+
+	wgpu::BufferDescriptor pixelbuffer_desc = {};
+	pixelbuffer_desc.mappedAtCreation = false;
+	pixelbuffer_desc.usage = wgpu::BufferUsage::MapRead | wgpu::BufferUsage::CopyDst;
+	pixelbuffer_desc.size = 4 * texture_dims.x * texture_dims.y;
+	m_pixelbuffer = m_device.createBuffer(pixelbuffer_desc);
+	log(std::format("Save image pixel buffer: {}", (void*)&m_pixelbuffer));
+
+	m_color_texture = Texture(m_device, m_queue, &m_pixelbuffer, pixelbuffer_desc.size, texture_dims.x, texture_dims.y);
+	log(std::format("Camera color texture: {}", (void*)&m_color_texture));
+
+	m_is_initialized = true;
+	
+	return true;
+}
+
+void Camera::on_frame()
+{
+	k4a::capture capture;
+	if (m_k4a_device.get_capture(&capture, std::chrono::milliseconds(0))) {
+		const k4a::image color_image = capture.get_color_image();
+
+		m_color_texture.update(reinterpret_cast<const BgraPixel*>(color_image.get_buffer()));
+	}
+
+	ImGui::Begin("Camera Capture Window", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
+	ImGui::SetWindowPos({ GUI_MENU_WIDTH, 0.f });
+	ImGui::SetWindowSize({ (float)m_width, (float)m_height });
+
+	ImVec2 viewport_dims = ImGui::GetContentRegionAvail();
+	ImVec2 image_dims = { (float)m_color_texture.width(), (float)m_color_texture.height() };
+	float image_aspect_ratio = image_dims.x / image_dims.y;
+	float viewport_aspect_ratio = viewport_dims.x / viewport_dims.y;
+
+	if (image_aspect_ratio > viewport_aspect_ratio) {
+		image_dims = { viewport_dims.x, viewport_dims.x / image_aspect_ratio };
+	}
+	else {
+		image_dims = { viewport_dims.y * image_aspect_ratio, viewport_dims.y };
+	}
+
+	ImGui::SetCursorPos({ (viewport_dims.x - image_dims.x) * .5f + 7, (viewport_dims.y - image_dims.y) * .5f + 7 });
+	ImGui::Image((ImTextureID)(intptr_t)m_color_texture.view(), image_dims);
+
+	ImGui::End();
+}
+
+void Camera::on_terminate()
+{
+	if (m_k4a_device) {
+		m_k4a_device.close();
+	}
+}
+
+bool Camera::is_initialized()
+{
+	return m_is_initialized;
+}
+
+void Camera::on_resize(int width, int height)
+{
+	m_width = width;
+	m_height = height;
 }
 
 void Camera::capture_point_cloud()
@@ -30,7 +146,7 @@ void Camera::capture_point_cloud()
 	config.depth_mode = K4A_DEPTH_MODE_WFOV_2X2BINNED;
 	config.camera_fps = K4A_FRAMES_PER_SECOND_30;
 
-	k4a::calibration calibration = m_device.get_calibration(config.depth_mode, config.color_resolution);
+	k4a::calibration calibration = m_k4a_device.get_calibration(config.depth_mode, config.color_resolution);
 
 	k4a::image xy_table = k4a::image::create(K4A_IMAGE_FORMAT_CUSTOM,
 											 calibration.depth_camera_calibration.resolution_width,
@@ -44,10 +160,10 @@ void Camera::capture_point_cloud()
 												calibration.depth_camera_calibration.resolution_height,
 												calibration.depth_camera_calibration.resolution_width * (int)sizeof(k4a_float3_t));
 
-	m_device.start_cameras(&config);
+	m_k4a_device.start_cameras(&config);
 
 	k4a::capture capture = NULL;
-	if (!m_device.get_capture(&capture, TIMEOUT_IN_MS)) {
+	if (!m_k4a_device.get_capture(&capture, TIMEOUT_IN_MS)) {
 		std::cerr << "Timed out waiting for a capture" << std::endl;
 		return;
 	}
@@ -61,6 +177,16 @@ void Camera::capture_point_cloud()
 	int point_count;
 	generate_point_cloud(depth_image, xy_table, point_cloud, &point_count);
 	write_point_cloud(file_name.c_str(), point_cloud, point_count);
+}
+
+Texture* Camera::get_color_texture_ptr()
+{
+	return &m_color_texture;
+}
+
+bool Camera::save_to_file(const std::filesystem::path path)
+{
+	return m_color_texture.save_to_file(path);
 }
 
 void Camera::create_xy_table(const k4a::calibration* calibration, k4a::image xy_table)
