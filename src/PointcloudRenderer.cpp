@@ -75,9 +75,9 @@ bool PointcloudRenderer::is_initialized()
 bool PointcloudRenderer::init_pointcloud()
 {
 	std::unordered_map<int64_t, Point3D> points;
-	if (!ResourceManager::read_points3d(RESOURCE_DIR "/points3D_garden.bin", points)) {
-		return false;
-	}
+	//if (!ResourceManager::read_points3d(RESOURCE_DIR "/points3D_garden.bin", points)) {
+	//	return false;
+	//}
 
 	std::vector<float> vertexData;
 

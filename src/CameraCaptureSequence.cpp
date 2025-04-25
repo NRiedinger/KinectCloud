@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <format>
 
+
 #include <imgui.h>
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -22,6 +23,9 @@ bool CameraCaptureSequence::on_init(Texture* color_texture_pointer, Texture* dep
 
 void CameraCaptureSequence::on_terminate()
 {
+	for (auto& capture : m_captures) {
+		delete capture;
+	}
 	m_captures.clear();
     m_initialized = false;
 }
@@ -31,16 +35,22 @@ void CameraCaptureSequence::on_capture()
 	std::string capture_name = std::format("{}", m_captures.size());
 	std::string filepath = OUTPUT_DIR + std::format("/{}.png", capture_name);
 
-	CameraCapture_t capture{};
-	capture.name = capture_name;
-	capture.image_color_width = m_color_texture_pointer->width();
-	capture.image_color_height = m_color_texture_pointer->height();
-	m_color_texture_pointer->save_to_buffer((unsigned char**)&capture.image_color_data);
-	capture.image_depth_width = m_depth_texture_pointer->width();
-	capture.image_depth_height = m_depth_texture_pointer->height();
-	m_depth_texture_pointer->save_to_buffer((unsigned char**)&capture.image_depth_data);
+	CameraCapture* capture = new CameraCapture();
+	capture->name = capture_name;
+	capture->image_color_width = m_color_texture_pointer->width();
+	capture->image_color_height = m_color_texture_pointer->height();
+	if (!m_color_texture_pointer->save_to_buffer((unsigned char**)&capture->image_color_data)) {
+		Logger::log("Failed to save color texture to capture data buffer", LoggingSeverity::Error);
+	}
+	capture->image_depth_width = m_depth_texture_pointer->width();
+	capture->image_depth_height = m_depth_texture_pointer->height();
+	capture->is_selected = false;
+	if (!m_depth_texture_pointer->save_to_buffer((unsigned char**)&capture->image_depth_data)) {
+		Logger::log("Failed to save depth texture to capture data buffer", LoggingSeverity::Error);
+	}
 	
 	m_captures.push_back(capture);
+	CameraCaptureSequence::s_capturelist_updated = true;
 }
 
 bool CameraCaptureSequence::is_initialized()
@@ -52,28 +62,32 @@ void CameraCaptureSequence::render_menu()
 {
 	ImGui::Text("Camera Captures");
 
-	static int current_capture_index = 0;
-	std::vector<std::string> captures_names;
+	ImGui::Separator();
 
-	if (m_captures.size() > 0) {
-		captures_names = get_captures_names();
+	ImGui::BeginChild("Captures Scrollable", { 0, GUI_CAPTURELIST_HEIGHT }, NULL, ImGuiWindowFlags_AlwaysVerticalScrollbar);
+	ImGui::Indent(GUI_CAPTURELIST_INDENT);
+
+	int i = 0;
+	for (auto& capture : m_captures) {
+		ImGui::PushID(i);
+		ImGui::Text(std::format("Capture \"{}\"", capture->name).c_str());
+		ImGui::Checkbox("Use pointcloud", &capture->is_selected);
+		/*ImGui::SameLine();
+		if(ImGui::Button("x")) {
+			m_captures.erase(m_captures.begin() + i);
+		}*/
+		ImGui::Separator();
+		ImGui::PopID();
+		i++;
 	}
-	else {
-		captures_names = { "No captures" };
+
+	if (CameraCaptureSequence::s_capturelist_updated) {
+		ImGui::SetScrollHereY(1.0);
+		CameraCaptureSequence::s_capturelist_updated = false;
 	}
 
-	auto item_getter = [](void* data, int idx, const char** out_text) -> bool {
-		const std::vector<std::string>* items = static_cast<std::vector<std::string>*>(data);
-		if (idx < 0 || idx > static_cast<int>(items->size()))
-			return false;
-
-		*out_text = items->at(idx).c_str();
-		return true;
-	};
-
-	ImGui::PushItemWidth(-1);
-	ImGui::ListBox(" ", &current_capture_index, item_getter, static_cast<void*>(&captures_names), captures_names.size(), 10);
-	ImGui::PopItemWidth();
+	ImGui::Unindent(GUI_CAPTURELIST_INDENT);
+	ImGui::EndChild();
 
 	ImGui::Separator();
 
@@ -86,22 +100,26 @@ void CameraCaptureSequence::render_menu()
 	}
 	ImGui::SameLine();
 	if (ImGui::Button("Reset")) {
+		for (auto capture : m_captures) {
+			delete capture;
+		}
 		m_captures.clear();
+		// TODO: clear memory of capture data to avoid memory leak
 	}
 }
 
 void CameraCaptureSequence::save_sequence()
 {
-	for (auto i = 0; i < m_captures.size(); i++) {
-		auto capture = m_captures.at(i);
-		auto path = OUTPUT_DIR + std::format("/{}.png", capture.name);
+	int i = 0;
+	for (auto& capture : m_captures) {
+		auto path = OUTPUT_DIR + std::format("/{}.png", capture->name);
 		bool success = !!stbi_write_png(
 			path.c_str(),
-			capture.image_color_width,
-			capture.image_color_height,
+			capture->image_color_width,
+			capture->image_color_height,
 			4,
-			capture.image_color_data,
-			4 * capture.image_color_width
+			(void*)capture->image_color_data,
+			4 * capture->image_color_width
 		);
 
 		if (!success) {
@@ -109,7 +127,9 @@ void CameraCaptureSequence::save_sequence()
 			return;
 		}
 		Logger::log(std::format("Saved image {} ({}/{})", path, i + 1, m_captures.size()));
+		i++;
 	}
+	
 	
 	Logger::log(std::format("Successfully saved {} captures.", m_captures.size()));
 	return;
@@ -122,8 +142,8 @@ std::vector<std::string> CameraCaptureSequence::get_captures_names()
     std::vector<std::string> result;
     result.resize(m_captures.size());
 
-    std::transform(m_captures.begin(), m_captures.end(), result.begin(), [](CameraCapture_t capture) {
-		return std::format("{} [{}]", capture.name, capture.image_color_data);
+    std::transform(m_captures.begin(), m_captures.end(), result.begin(), [](CameraCapture* capture) {
+		return std::format("{} [{}]", capture->name, (void*)capture->image_color_data);
     });
 
     return result;

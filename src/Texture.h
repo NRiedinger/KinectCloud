@@ -42,9 +42,10 @@ public:
 private:
 	int m_width = 0;
 	int m_height = 0;
+	size_t m_typesize = 0;
 	wgpu::Texture  m_texture;
 	//wgpu::TextureView m_texture_view;
-	WGPUTextureView m_texture_view;
+	WGPUTextureView m_texture_view = nullptr;
 	wgpu::Device m_device = nullptr;
 	wgpu::Queue m_queue = nullptr;
 	wgpu::Buffer* m_pixelbuffer = nullptr;

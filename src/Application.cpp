@@ -28,6 +28,15 @@ bool Application::on_init()
 	if (!init_gui())
 		return false;
 
+	if (!m_camera.on_init(m_device, m_queue, m_window_width - GUI_MENU_WIDTH, m_window_height - GUI_CONSOLE_HEIGHT))
+		return false;
+
+	if (!m_capture_sequence.on_init(m_camera.get_color_texture_ptr(), m_camera.get_depth_texture_ptr()))
+		return false;
+	
+	if(!m_renderer.on_init(m_device, m_queue, m_window_width - GUI_MENU_WIDTH, m_window_height - GUI_CONSOLE_HEIGHT))
+		return false;
+
 	return true;
 }
 
@@ -36,6 +45,8 @@ void Application::on_finish()
 	terminate_gui();
 	terminate_swapchain();
 	terminate_window_and_device();
+	m_camera.on_terminate();
+	m_renderer.on_terminate();
 }
 
 
@@ -167,7 +178,7 @@ bool Application::init_window_and_device()
 			std::cout << " (message: " << message << ")";
 		}
 		std::cout << std::endl;
-		exit(0);
+		throw std::exception("lmao");
 	});
 
 	m_device_lost_callback = m_device.setDeviceLostCallback([](wgpu::DeviceLostReason reason, char const* message) {
@@ -333,64 +344,51 @@ void Application::render()
 	ImGui::SetWindowPos({ 0.f, 0.f });
 	ImGui::SetWindowSize({ GUI_MENU_WIDTH, (float)m_window_height });
 
+	auto app_state = m_app_state;
+	auto available_width = ImGui::GetContentRegionAvail();
+	ImVec4 active_button_color(ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered));
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+	if (app_state == AppState::Capture)
+		ImGui::PushStyleColor(ImGuiCol_Button, active_button_color);
 
-	static const char* select_mode_items[] = { "Capture", "Pointcloud" };
-	static const char* current_select_mode_item = "Select";
-	if (ImGui::BeginCombo("Mode", current_select_mode_item)) {
-		for (int i = 0; i < IM_ARRAYSIZE(select_mode_items); i++) {
-			bool is_selected = current_select_mode_item == select_mode_items[i];
-			if (ImGui::Selectable(select_mode_items[i], is_selected)) {
-				current_select_mode_item = select_mode_items[i];
-			}
-			if (is_selected) {
-				ImGui::SetItemDefaultFocus();
-			}
-		}
-		ImGui::EndCombo();
-	}
-
-	ImGui::Separator();
-
-	if (strcmp(current_select_mode_item, "Capture") == 0) {
+	if (ImGui::Button("Capture", ImVec2(available_width.x / 2, 40))) {
 		m_app_state = AppState::Capture;
-
-		if (!m_capture_sequence.is_initialized()) {
-			m_capture_sequence.on_init(m_camera.get_color_texture_ptr(), m_camera.get_depth_texture_ptr());
-		}
-		else {
-			m_capture_sequence.render_menu();
-		}
-		
 	}
-	else if (strcmp(current_select_mode_item, "Pointcloud") == 0) {
+
+	if (app_state == AppState::Capture)
+		ImGui::PopStyleColor();
+
+	ImGui::SameLine();
+
+	if (app_state == AppState::Pointcloud)
+		ImGui::PushStyleColor(ImGuiCol_Button, active_button_color);
+
+	if (ImGui::Button("Pointcloud", ImVec2(available_width.x / 2, 40))) {
 		m_app_state = AppState::Pointcloud;
 	}
-	else {
-		m_app_state = AppState::Default;
-	}
+
+	if (app_state == AppState::Pointcloud)
+		ImGui::PopStyleColor();
+
+	ImGui::PopStyleVar();
+	
+	ImGui::SetCursorPosY(50);
+
+
+	m_capture_sequence.render_menu();
 	ImGui::End();
 
 
 	// render content
 	switch (m_app_state) {
 		case AppState::Capture:
-			if (!m_camera.is_initialized()) {
-				m_camera.on_init(m_device, m_queue, m_window_width - GUI_MENU_WIDTH, m_window_height - GUI_CONSOLE_HEIGHT);
-			}
-			else {
-				m_camera.on_frame();
-			}
-
+			m_camera.on_frame();
 			break;
+
 		case AppState::Pointcloud:
-			if (!m_renderer.is_initialized()) {
-				m_renderer.on_init(m_device, m_queue, m_window_width - GUI_MENU_WIDTH, m_window_height - GUI_CONSOLE_HEIGHT);
-			}
-			else {
-				m_renderer.on_frame();
-			}
-
+			m_renderer.on_frame();
 			break;
+
 		case AppState::Default:
 		default:
 			break;

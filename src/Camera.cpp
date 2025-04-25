@@ -11,6 +11,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <format>
 
 Camera::Camera()
 {
@@ -46,6 +47,11 @@ bool Camera::on_init(wgpu::Device device, wgpu::Queue queue, int width, int heig
 	Logger::log("Started opening k4a device...");
 
 	m_k4a_device = k4a::device::open(K4A_DEVICE_DEFAULT);
+	if (!m_k4a_device) {
+		Logger::log("Could not create k4a device!", LoggingSeverity::Error);
+		return false;
+	}
+	Logger::log(std::format("Got k4a device: {}", (void*)&m_k4a_device));
 	m_k4a_device.start_cameras(&config);
 
 	Logger::log("Finished opening k4a device.");
@@ -78,7 +84,7 @@ bool Camera::on_init(wgpu::Device device, wgpu::Queue queue, int width, int heig
 	wgpu::BufferDescriptor pixelbuffer_desc = {};
 	pixelbuffer_desc.mappedAtCreation = false;
 	pixelbuffer_desc.usage = wgpu::BufferUsage::MapRead | wgpu::BufferUsage::CopyDst;
-	pixelbuffer_desc.size = 4 * color_texture_dims.x * color_texture_dims.y;
+	pixelbuffer_desc.size = sizeof(BgraPixel) * color_texture_dims.x * color_texture_dims.y;
 	m_pixelbuffer = m_device.createBuffer(pixelbuffer_desc);
 	Logger::log(std::format("Save image pixel buffer: {}", (void*)&m_pixelbuffer));
 
@@ -111,11 +117,19 @@ bool Camera::on_init(wgpu::Device device, wgpu::Queue queue, int width, int heig
 	wgpu::BufferDescriptor depthbuffer_desc = {};
 	depthbuffer_desc.mappedAtCreation = false;
 	depthbuffer_desc.usage = wgpu::BufferUsage::MapRead | wgpu::BufferUsage::CopyDst;
-	depthbuffer_desc.size = 4 * depth_texture_dims.x * depth_texture_dims.y;
+	depthbuffer_desc.size = sizeof(Depth16Pixel) * depth_texture_dims.x * depth_texture_dims.y;
 	m_depthbuffer = m_device.createBuffer(depthbuffer_desc);
+	if (!m_depthbuffer) {
+		Logger::log("Could not create save image depth buffer!", LoggingSeverity::Error);
+		return false;
+	}
 	Logger::log(std::format("Save image depth buffer: {}", (void*)&m_depthbuffer));
 
 	m_depth_texture = Texture(m_device, m_queue, &m_depthbuffer, depthbuffer_desc.size, depth_texture_dims.x, depth_texture_dims.y, wgpu::TextureFormat::Depth16Unorm);
+	if (!m_depth_texture.view()) {
+		Logger::log("Could not create camera depth texture!", LoggingSeverity::Error);
+		return false;
+	}
 	Logger::log(std::format("Camera depth texture: {}", (void*)&m_depth_texture));
 
 	m_initialized = true;
@@ -161,6 +175,7 @@ void Camera::on_terminate()
 	if (m_k4a_device) {
 		m_k4a_device.close();
 	}
+	m_initialized = false;
 }
 
 bool Camera::is_initialized()

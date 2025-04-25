@@ -39,6 +39,17 @@ Texture::Texture(wgpu::Device device, wgpu::Queue queue, wgpu::Buffer* pixelbuff
     view_desc.aspect = wgpu::TextureAspect::All;
 
     m_texture_view = wgpuTextureCreateView(m_texture, &view_desc);
+
+    switch (texture_format) {
+        case wgpu::TextureFormat::BGRA8Unorm:
+            m_typesize = sizeof(BgraPixel);
+            break;
+        case wgpu::TextureFormat::Depth16Unorm:
+            m_typesize = sizeof(Depth16Pixel);
+            break;
+        default:
+            break;
+    }
 }
 
 Texture::Texture(Texture&& other) noexcept 
@@ -49,7 +60,8 @@ Texture::Texture(Texture&& other) noexcept
     m_texture(other.m_texture),
     m_texture_view(other.m_texture_view),
     m_pixelbuffer(other.m_pixelbuffer),
-    m_pixelbuffer_size(other.m_pixelbuffer_size)
+    m_pixelbuffer_size(other.m_pixelbuffer_size),
+    m_typesize(other.m_typesize)
 {
     other.m_texture = nullptr;
     other.m_texture_view = nullptr;
@@ -74,6 +86,7 @@ Texture& Texture::operator=(Texture&& other) noexcept
         m_texture_view = other.m_texture_view;
         m_pixelbuffer = other.m_pixelbuffer;
         m_pixelbuffer_size = other.m_pixelbuffer_size;
+        m_typesize = other.m_typesize;
 
         other.m_texture = nullptr;
         other.m_texture_view = nullptr;
@@ -132,8 +145,16 @@ void Texture::update(const Depth16Pixel* data)
 
 void Texture::delete_texture()
 {
-    m_texture = nullptr;
-    m_texture_view = nullptr;
+    if (m_texture) {
+        /*m_texture.destroy();
+        m_texture.release();*/
+        m_texture = nullptr;
+    }
+    
+    if (m_texture_view) {
+        /*wgpuTextureViewRelease(m_texture_view);*/
+        m_texture_view = nullptr;
+    }
 }
 
 bool Texture::save_to_buffer(unsigned char** out_buffer_pointer)
@@ -147,7 +168,7 @@ bool Texture::save_to_buffer(unsigned char** out_buffer_pointer)
 
     wgpu::ImageCopyBuffer destination = wgpu::Default;
     destination.buffer = *m_pixelbuffer;
-    destination.layout.bytesPerRow = 4 * m_width;
+    destination.layout.bytesPerRow = m_typesize * m_width;
     destination.layout.offset = 0;
     destination.layout.rowsPerImage = m_height;
 

@@ -42,7 +42,7 @@ private:
 	int m_window_height = DEFAULT_WINDOW_H;
 	bool m_is_minimized = false;
 
-	AppState m_app_state = AppState::Default;
+	AppState m_app_state = AppState::Capture;
 	Camera m_camera;
 	PointcloudRenderer m_renderer;
 	CameraCaptureSequence m_capture_sequence;
