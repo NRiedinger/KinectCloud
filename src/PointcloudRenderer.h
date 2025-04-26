@@ -1,0 +1,77 @@
+#include <webgpu/webgpu.hpp>
+#include <k4a/k4a.hpp>
+
+#include "Structs.h"
+#include "Pointcloud.h"
+
+#pragma once
+
+
+class PointcloudRenderer {
+public:
+	bool on_init(wgpu::Device device, wgpu::Queue queue, int width, int height);
+	void on_terminate();
+	void on_frame();
+	bool is_initialized();
+
+	void on_resize(int width, int height);
+
+	void add_pointcloud(Pointcloud* pc);
+	void clear_pointclouds();
+
+private:
+	bool init_rendertarget();
+	void terminate_rendertarget();
+
+	bool init_depthbuffer();
+	void terminate_depthbuffer();
+
+	bool init_renderpipeline();
+	void terminate_renderpipeline();
+
+	bool init_uniforms();
+	void terminate_uniforms();
+
+	bool init_bindgroup();
+	void terminate_bindgroup();
+
+
+	void update_projectionmatrix();
+	void update_viewmatrix();
+	void handle_pointcloud_mouse_events();
+	
+
+private:
+	std::vector<Pointcloud*> m_pointclouds;
+
+	bool m_initialized = false;
+	int m_width;
+	int m_height;
+
+	wgpu::Device m_device = nullptr;
+	wgpu::Queue m_queue = nullptr;
+
+	// render uniforms
+	Uniforms::RenderUniforms m_renderuniforms;
+	wgpu::Buffer m_renderuniform_buffer;
+
+	// bind group
+	wgpu::BindGroup m_bindgroup = nullptr;
+
+	// render pipeline
+	wgpu::BindGroupLayout m_bindgroup_layout = nullptr;
+	wgpu::ShaderModule m_rendershader_module = nullptr;
+	wgpu::RenderPipeline m_renderpipeline = nullptr;
+
+	// depth buffer
+	wgpu::TextureFormat m_depthtexture_format = DEPTHTEXTURE_FORMAT;
+	wgpu::Texture m_depthtexture = nullptr;
+	wgpu::TextureView m_depthtexture_view = nullptr;
+
+	// rendertarget
+	wgpu::Texture m_rendertarget_texture = nullptr;
+	WGPUTextureView m_rendertarget_texture_view = nullptr;
+
+	CameraState m_camerastate;
+	DragState m_dragstate;
+};

@@ -1,0 +1,24 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\nikla\Development\webgpu_cpp_test\CMakeFiles\1fa507622c1d377361dd65649023b91e\update_mappings.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Users\nikla\Development\webgpu_cpp_test\glfw\src\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="C:\Users\nikla\Development\webgpu_cpp_test\glfw\src\mappings.h.in">
+      <Filter>Header Files</Filter>
+    </None>
+    <None Include="C:\Users\nikla\Development\webgpu_cpp_test\glfw\CMake\GenerateMappings.cmake" />
+    <None Include="C:\Users\nikla\Development\webgpu_cpp_test\glfw\src\CMakeFiles\update_mappings" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{CAD8D780-44E4-3FA8-9386-D72C7E15F713}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{4150AAD6-2498-32ED-827F-21227F47F17B}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

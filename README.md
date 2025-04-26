@@ -1,1 +1,3 @@
-# Thesis_SoSe25
+https://eliemichel.github.io/LearnWebGPU/
+
+cmake . -B build
