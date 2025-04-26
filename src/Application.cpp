@@ -10,6 +10,7 @@
 
 #include "utils/glfw3webgpu.h"
 #include "ResourceManager.h"
+#include "Pointcloud.h"
 #include "Logger.h"
 #include "Darkmode.h"
 
@@ -31,7 +32,7 @@ bool Application::on_init()
 	if (!m_camera.on_init(m_device, m_queue, m_window_width - GUI_MENU_WIDTH, m_window_height - GUI_CONSOLE_HEIGHT))
 		return false;
 
-	if (!m_capture_sequence.on_init(m_camera.get_color_texture_ptr(), m_camera.get_depth_texture_ptr()))
+	if (!m_capture_sequence.on_init(m_camera.color_texture_ptr(), m_camera.depth_image(), m_camera.calibration()))
 		return false;
 	
 	if(!m_renderer.on_init(m_device, m_queue, m_window_width - GUI_MENU_WIDTH, m_window_height - GUI_CONSOLE_HEIGHT))
@@ -360,22 +361,22 @@ void Application::render()
 
 	ImGui::SameLine();
 
-	if (app_state == AppState::Pointcloud)
+	if (app_state == AppState::Edit)
 		ImGui::PushStyleColor(ImGuiCol_Button, active_button_color);
 
-	if (ImGui::Button("Pointcloud", ImVec2(available_width.x / 2, 40))) {
-		m_app_state = AppState::Pointcloud;
+	if (ImGui::Button("Edit", ImVec2(available_width.x / 2, 40))) {
+		m_app_state = AppState::Edit;
 	}
 
-	if (app_state == AppState::Pointcloud)
+	if (app_state == AppState::Edit)
 		ImGui::PopStyleColor();
 
 	ImGui::PopStyleVar();
 	
 	ImGui::SetCursorPosY(50);
 
+	render_capture_menu();
 
-	m_capture_sequence.render_menu();
 	ImGui::End();
 
 
@@ -385,7 +386,7 @@ void Application::render()
 			m_camera.on_frame();
 			break;
 
-		case AppState::Pointcloud:
+		case AppState::Edit:
 			m_renderer.on_frame();
 			break;
 
@@ -412,5 +413,58 @@ void Application::render()
 	ImGui::EndChild();
 
 	ImGui::End();
+}
+
+void Application::render_capture_menu()
+{
+	ImGui::Text("Camera Captures");
+
+	ImGui::Separator();
+
+	ImGui::BeginChild("Captures Scrollable", { 0, GUI_CAPTURELIST_HEIGHT }, NULL, ImGuiWindowFlags_AlwaysVerticalScrollbar);
+	ImGui::Indent(GUI_CAPTURELIST_INDENT);
+
+	int i = 0;
+	for (auto capture : m_capture_sequence.captures()) {
+		ImGui::PushID(i);
+		ImGui::Text(std::format("Capture \"{}\"", capture->name).c_str());
+		/*ImGui::Checkbox("Use pointcloud", &capture->is_selected);
+		ImGui::SameLine();*/
+		if(ImGui::Button("Add Pointcloud")) {
+			m_renderer.add_pointcloud(new Pointcloud(m_device, m_queue, capture->depth_image, capture->calibration));
+		}
+		ImGui::Separator();
+		ImGui::PopID();
+		i++;
+	}
+
+	if (CameraCaptureSequence::s_capturelist_updated) {
+		ImGui::SetScrollHereY(1.0);
+		CameraCaptureSequence::s_capturelist_updated = false;
+	}
+
+	ImGui::Unindent(GUI_CAPTURELIST_INDENT);
+	ImGui::EndChild();
+
+	ImGui::Separator();
+
+	if (m_app_state == AppState::Capture) {
+		if (ImGui::Button("Capture [space]") || ImGui::IsKeyPressed(ImGuiKey_Space)) {
+			m_capture_sequence.on_capture();
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Save")) {
+			m_capture_sequence.save_sequence();
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Reset")) {
+			for (auto capture : m_capture_sequence.captures()) {
+				delete capture;
+			}
+			m_capture_sequence.captures().clear();
+
+			m_renderer.clear_pointclouds();
+		}
+	}
 }
 

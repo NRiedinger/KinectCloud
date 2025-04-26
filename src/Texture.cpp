@@ -202,10 +202,6 @@ bool Texture::save_to_buffer(unsigned char** out_buffer_pointer)
             *out_buffer_pointer = new unsigned char[m_pixelbuffer_size];
             std::memcpy(*out_buffer_pointer, mapped_range, m_pixelbuffer_size);
         }
-        //unsigned char* pixeldata = (unsigned char*)m_pixelbuffer->getConstMappedRange(0, m_pixelbuffer_size);
-        //*out_buffer_pointer = (unsigned char*)m_pixelbuffer->getConstMappedRange(0, m_pixelbuffer_size);
-        //int bytes_per_row = 4 * m_width;
-        //int success = stbi_write_png(path.string().c_str(), (int)m_width, (int)m_height, 4, pixeldata, bytes_per_row);
 
         m_pixelbuffer->unmap();
         done = true;

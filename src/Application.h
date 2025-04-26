@@ -36,6 +36,8 @@ private:
 	void after_frame();
 	void render();
 
+	void render_capture_menu();
+
 private:
 	std::string m_window_title = DEFAULT_WINDOW_TITLE;
 	int m_window_width = DEFAULT_WINDOW_W;

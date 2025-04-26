@@ -24,13 +24,14 @@
 #define POINTCLOUD_DEPTH_MODE K4A_DEPTH_MODE_WFOV_2X2BINNED
 
 #define SWAPCHAIN_FORMAT wgpu::TextureFormat::BGRA8Unorm
+#define DEPTHTEXTURE_FORMAT wgpu::TextureFormat::Depth24Plus
 
 
 
 enum class AppState {
 	Default,
 	Capture,
-	Pointcloud
+	Edit
 };
 
 struct BgraPixel {
@@ -68,7 +69,7 @@ struct VertexAttributes {
 
 struct CameraState {
 	glm::vec2 angles = { .8f, .5f };
-	float zoom = -1.2f;
+	float zoom = -7.f;
 	
 
 	glm::vec3 get_camera_position() {

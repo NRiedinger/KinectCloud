@@ -1,8 +1,12 @@
 #include <webgpu/webgpu.hpp>
+#include <k4a/k4a.hpp>
 
 #include "Structs.h"
+#include "Pointcloud.h"
 
 #pragma once
+
+
 class PointcloudRenderer {
 public:
 	bool on_init(wgpu::Device device, wgpu::Queue queue, int width, int height);
@@ -12,12 +16,15 @@ public:
 
 	void on_resize(int width, int height);
 
+	void add_pointcloud(Pointcloud* pc);
+	void clear_pointclouds();
+
 private:
 	bool init_rendertarget();
 	void terminate_rendertarget();
 
-	bool init_pointcloud();
-	void terminate_pointcloud();
+	bool init_depthbuffer();
+	void terminate_depthbuffer();
 
 	bool init_renderpipeline();
 	void terminate_renderpipeline();
@@ -28,11 +35,6 @@ private:
 	bool init_bindgroup();
 	void terminate_bindgroup();
 
-	bool init_depthbuffer();
-	void terminate_depthbuffer();
-
-	
-
 
 	void update_projectionmatrix();
 	void update_viewmatrix();
@@ -40,16 +42,14 @@ private:
 	
 
 private:
+	std::vector<Pointcloud*> m_pointclouds;
+
 	bool m_initialized = false;
 	int m_width;
 	int m_height;
 
 	wgpu::Device m_device = nullptr;
 	wgpu::Queue m_queue = nullptr;
-
-	// points
-	wgpu::Buffer m_vertexbuffer = nullptr;
-	int m_vertexcount = 0;
 
 	// render uniforms
 	Uniforms::RenderUniforms m_renderuniforms;
@@ -64,7 +64,7 @@ private:
 	wgpu::RenderPipeline m_renderpipeline = nullptr;
 
 	// depth buffer
-	wgpu::TextureFormat m_depthtexture_format = wgpu::TextureFormat::Depth24Plus;
+	wgpu::TextureFormat m_depthtexture_format = DEPTHTEXTURE_FORMAT;
 	wgpu::Texture m_depthtexture = nullptr;
 	wgpu::TextureView m_depthtexture_view = nullptr;
 

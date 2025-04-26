@@ -16,6 +16,7 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 
+
 bool PointcloudRenderer::on_init(wgpu::Device device, wgpu::Queue queue, int width, int height)
 {
 	m_device = device;
@@ -25,14 +26,11 @@ bool PointcloudRenderer::on_init(wgpu::Device device, wgpu::Queue queue, int wid
 
 	if (!init_rendertarget())
 		return false;
-	
+
 	if (!init_depthbuffer())
 		return false;
 
 	if (!init_renderpipeline())
-		return false;
-
-	if (!init_pointcloud())
 		return false;
 
 	if (!init_uniforms())
@@ -45,6 +43,7 @@ bool PointcloudRenderer::on_init(wgpu::Device device, wgpu::Queue queue, int wid
 
 	return true;
 }
+
 
 void PointcloudRenderer::on_terminate()
 {
@@ -60,11 +59,23 @@ void PointcloudRenderer::on_resize(int width, int height)
 {
 	m_width = width;
 	m_height = height;
-	
+
 	terminate_depthbuffer();
 	terminate_rendertarget();
 	init_rendertarget();
 	init_depthbuffer();
+}
+
+void PointcloudRenderer::add_pointcloud(Pointcloud* pc) {
+	m_pointclouds.push_back(pc);
+}
+
+void PointcloudRenderer::clear_pointclouds()
+{
+	for (auto pc : m_pointclouds) {
+		delete pc;
+	}
+	m_pointclouds.clear();
 }
 
 bool PointcloudRenderer::is_initialized()
@@ -72,68 +83,6 @@ bool PointcloudRenderer::is_initialized()
 	return m_initialized;
 }
 
-bool PointcloudRenderer::init_pointcloud()
-{
-	std::unordered_map<int64_t, Point3D> points;
-	//if (!ResourceManager::read_points3d(RESOURCE_DIR "/points3D_garden.bin", points)) {
-	//	return false;
-	//}
-
-	std::vector<float> vertexData;
-
-	for (auto kv : points) {
-		auto point = kv.second;
-
-		// x
-		vertexData.push_back(point.xyz.at(0));
-		// y
-		vertexData.push_back(point.xyz.at(1));
-		// z
-		vertexData.push_back(point.xyz.at(2));
-
-		// normals (keep 0 for now)
-		vertexData.push_back(0);
-		vertexData.push_back(0);
-		vertexData.push_back(0);
-
-		// r
-		vertexData.push_back(point.rgb.at(0));
-		// g
-		vertexData.push_back(point.rgb.at(1));
-		// b
-		vertexData.push_back(point.rgb.at(2));
-
-		// uv (keep 0 for now)
-		vertexData.push_back(0);
-		vertexData.push_back(0);
-	}
-
-	m_vertexcount = static_cast<int>(vertexData.size() / (sizeof(VertexAttributes) / sizeof(float)));
-
-	wgpu::BufferDescriptor bufferDesc{};
-	bufferDesc.size = m_vertexcount * sizeof(VertexAttributes);
-	bufferDesc.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Vertex;
-	bufferDesc.mappedAtCreation = false;
-
-	m_vertexbuffer = m_device.createBuffer(bufferDesc);
-	if (!m_vertexbuffer) {
-		Logger::log("Could not create vertex buffer!", LoggingSeverity::Error);
-		return false;
-	}
-	m_queue.writeBuffer(m_vertexbuffer, 0, vertexData.data(), bufferDesc.size);
-
-	Logger::log(std::format("Vertex buffer: {}", (void*)m_vertexbuffer));
-	Logger::log(std::format("Vertex count: {}", m_vertexcount));
-
-	return true;
-}
-
-void PointcloudRenderer::terminate_pointcloud()
-{
-	m_vertexbuffer.destroy();
-	m_vertexbuffer.release();
-	m_vertexcount = 0;
-}
 
 bool PointcloudRenderer::init_renderpipeline()
 {
@@ -220,7 +169,7 @@ bool PointcloudRenderer::init_renderpipeline()
 	wgpu::DepthStencilState depthstencil_state = wgpu::Default;
 	depthstencil_state.depthCompare = wgpu::CompareFunction::Less;
 	depthstencil_state.depthWriteEnabled = wgpu::OptionalBool::True;
-	depthstencil_state.format = m_depthtexture_format;
+	depthstencil_state.format = DEPTHTEXTURE_FORMAT;
 	depthstencil_state.stencilReadMask = 0;
 	depthstencil_state.stencilWriteMask = 0;
 
@@ -333,49 +282,6 @@ void PointcloudRenderer::terminate_bindgroup()
 	m_bindgroup.release();
 }
 
-bool PointcloudRenderer::init_depthbuffer()
-{
-	Logger::log("Initializing depth buffer...");
-	wgpu::TextureDescriptor depthtexture_desc{};
-	depthtexture_desc.dimension = wgpu::TextureDimension::_2D;
-	depthtexture_desc.format = m_depthtexture_format;
-	depthtexture_desc.mipLevelCount = 1;
-	depthtexture_desc.sampleCount = 1;
-	depthtexture_desc.size = { static_cast<uint32_t>(m_width), static_cast<uint32_t>(m_height), 1 };
-	depthtexture_desc.usage = wgpu::TextureUsage::RenderAttachment;
-	depthtexture_desc.viewFormatCount = 1;
-	depthtexture_desc.viewFormats = (WGPUTextureFormat*)&m_depthtexture_format;
-	m_depthtexture = m_device.createTexture(depthtexture_desc);
-	if (!m_depthtexture) {
-		Logger::log("Could not create depth texture!", LoggingSeverity::Error);
-		return false;
-	}
-	Logger::log(std::format("Depth texture: {}", (void*)m_depthtexture));
-
-	wgpu::TextureViewDescriptor depthtexture_view_desc{};
-	depthtexture_view_desc.aspect = wgpu::TextureAspect::DepthOnly;
-	depthtexture_view_desc.baseArrayLayer = 0;
-	depthtexture_view_desc.arrayLayerCount = 1;
-	depthtexture_view_desc.baseMipLevel = 0;
-	depthtexture_view_desc.mipLevelCount = 1;
-	depthtexture_view_desc.dimension = wgpu::TextureViewDimension::_2D;
-	depthtexture_view_desc.format = m_depthtexture_format;
-	m_depthtexture_view = m_depthtexture.createView(depthtexture_view_desc);
-	if (!m_depthtexture_view) {
-		Logger::log("Could not create depth texture view!", LoggingSeverity::Error);
-		return false;
-	}
-	Logger::log(std::format("Depth texture view: {}", (void*)m_depthtexture_view));
-
-	return true;
-}
-
-void PointcloudRenderer::terminate_depthbuffer()
-{
-	m_depthtexture_view.release();
-	m_depthtexture.destroy();
-	m_depthtexture.release();
-}
 
 bool PointcloudRenderer::init_rendertarget()
 {
@@ -424,7 +330,7 @@ void PointcloudRenderer::terminate_rendertarget()
 void PointcloudRenderer::update_projectionmatrix()
 {
 	float ratio = m_width / m_height;
-	m_renderuniforms.projectionMatrix = glm::perspective((float)(45 * M_PI / 180), ratio, .01f, 100.f);
+	m_renderuniforms.projectionMatrix = glm::perspective((float)(45 * M_PI / 180), ratio, .01f, 1000.f);
 	m_queue.writeBuffer(m_renderuniform_buffer, offsetof(Uniforms::RenderUniforms, projectionMatrix), &m_renderuniforms.projectionMatrix, sizeof(Uniforms::RenderUniforms::projectionMatrix));
 }
 
@@ -439,6 +345,8 @@ void PointcloudRenderer::handle_pointcloud_mouse_events()
 {
 	ImVec2 mouse_pos = ImGui::GetMousePos();
 
+
+	// drag camera
 	if (ImGui::IsWindowHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left) && !m_dragstate.active) {
 		m_dragstate.active = true;
 		m_dragstate.startMouse = glm::vec2(mouse_pos.x, mouse_pos.y);
@@ -455,6 +363,14 @@ void PointcloudRenderer::handle_pointcloud_mouse_events()
 
 		// clamp pitch
 		m_camerastate.angles.y = glm::clamp(m_camerastate.angles.y, -(float)M_PI / 2 + 1e-5f, (float)M_PI / 2 - 1e-5f);
+		update_viewmatrix();
+	}
+
+	// zoom camera
+	auto mwheel = ImGui::GetIO().MouseWheel;
+	if (abs(mwheel) > .1f && ImGui::IsWindowHovered()) {
+		m_camerastate.zoom += m_dragstate.SCROLL_SENSITIVITY * ImGui::GetIO().MouseWheel;
+		m_camerastate.zoom = glm::clamp(m_camerastate.zoom, -10.f, 2.f);
 		update_viewmatrix();
 	}
 }
@@ -500,11 +416,12 @@ void PointcloudRenderer::on_frame()
 
 	wgpu::RenderPassEncoder renderpass = encoder.beginRenderPass(renderpass_desc);
 
-
-	renderpass.setPipeline(m_renderpipeline);
-	renderpass.setVertexBuffer(0, m_vertexbuffer, 0, m_vertexbuffer.getSize()/*m_vertexCount * sizeof(VertexAttributes)*/);
-	renderpass.setBindGroup(0, m_bindgroup, 0, nullptr);
-	renderpass.draw(m_vertexcount, 1, 0, 0);
+	for (auto pc : m_pointclouds) {
+		renderpass.setPipeline(m_renderpipeline);
+		renderpass.setVertexBuffer(0, pc->vertexbuffer(), 0, pc->vertexbuffer().getSize()/*m_vertexCount * sizeof(VertexAttributes)*/);
+		renderpass.setBindGroup(0, m_bindgroup, 0, nullptr);
+		renderpass.draw(pc->vertexcount(), 1, 0, 0);
+	}
 
 	ImGui::Begin("Pointcloud Window", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
 	ImGui::SetWindowPos({ GUI_MENU_WIDTH, 0.f });
@@ -527,4 +444,48 @@ void PointcloudRenderer::on_frame()
 
 	encoder.release();
 	m_queue.submit(command);
+}
+
+bool PointcloudRenderer::init_depthbuffer()
+{
+	Logger::log("Initializing depth buffer...");
+	wgpu::TextureDescriptor depthtexture_desc{};
+	depthtexture_desc.dimension = wgpu::TextureDimension::_2D;
+	depthtexture_desc.format = m_depthtexture_format;
+	depthtexture_desc.mipLevelCount = 1;
+	depthtexture_desc.sampleCount = 1;
+	depthtexture_desc.size = { static_cast<uint32_t>(m_width), static_cast<uint32_t>(m_height), 1 };
+	depthtexture_desc.usage = wgpu::TextureUsage::RenderAttachment;
+	depthtexture_desc.viewFormatCount = 1;
+	depthtexture_desc.viewFormats = (WGPUTextureFormat*)&m_depthtexture_format;
+	m_depthtexture = m_device.createTexture(depthtexture_desc);
+	if (!m_depthtexture) {
+		Logger::log("Could not create depth texture!", LoggingSeverity::Error);
+		return false;
+	}
+	Logger::log(std::format("Depth texture: {}", (void*)m_depthtexture));
+
+	wgpu::TextureViewDescriptor depthtexture_view_desc{};
+	depthtexture_view_desc.aspect = wgpu::TextureAspect::DepthOnly;
+	depthtexture_view_desc.baseArrayLayer = 0;
+	depthtexture_view_desc.arrayLayerCount = 1;
+	depthtexture_view_desc.baseMipLevel = 0;
+	depthtexture_view_desc.mipLevelCount = 1;
+	depthtexture_view_desc.dimension = wgpu::TextureViewDimension::_2D;
+	depthtexture_view_desc.format = m_depthtexture_format;
+	m_depthtexture_view = m_depthtexture.createView(depthtexture_view_desc);
+	if (!m_depthtexture_view) {
+		Logger::log("Could not create depth texture view!", LoggingSeverity::Error);
+		return false;
+	}
+	Logger::log(std::format("Depth texture view: {}", (void*)m_depthtexture_view));
+
+	return true;
+}
+
+void PointcloudRenderer::terminate_depthbuffer()
+{
+	m_depthtexture_view.release();
+	m_depthtexture.destroy();
+	m_depthtexture.release();
 }
