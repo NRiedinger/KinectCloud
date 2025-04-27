@@ -19,6 +19,7 @@ struct Uniforms_t {
 	modelMatrix: mat4x4f,
 };
 @group(0) @binding(0) var<uniform> uniforms: Uniforms_t;
+@group(0) @binding(1) var<uniform> transformation: mat4x4f;
 
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
@@ -26,7 +27,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
 	let instancePosition = in.position + vec3f(f32(in.instanceIdx), 0.0, 0.0);
 
-	out.position = uniforms.projectionMatrix * uniforms.viewMatrix * uniforms.modelMatrix * vec4f(in.position/*instancePosition*/, 1.0);
+	out.position = uniforms.projectionMatrix * uniforms.viewMatrix * uniforms.modelMatrix * transformation * vec4f(in.position/*instancePosition*/, 1.0);
 	
 	out.normal = (uniforms.modelMatrix * vec4f(in.normal, 0.0)).xyz;
 	out.color = in.color;
