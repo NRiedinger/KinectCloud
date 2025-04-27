@@ -7,7 +7,7 @@
 
 class Pointcloud {
 public:
-	Pointcloud(wgpu::Device device, wgpu::Queue queue, k4a::image depth_image, k4a::calibration calibration);
+	Pointcloud(wgpu::Device device, wgpu::Queue queue, k4a::image depth_image, k4a::calibration calibration, glm::mat4* transform);
 	~Pointcloud();
 
 	inline wgpu::Buffer vertexbuffer() {
@@ -16,6 +16,10 @@ public:
 
 	inline int vertexcount() {
 		return m_vertexcount;
+	}
+
+	inline glm::mat4* transform() {
+		return m_transform;
 	}
 
 private:
@@ -30,7 +34,10 @@ private:
 	wgpu::Device m_device = nullptr;
 	wgpu::Queue m_queue = nullptr;
 	k4a::image m_depth_image;
+	k4a::image m_transformed_depth_image;
 	k4a::calibration m_calibration;
+	glm::mat4* m_transform;
+	
 
 	// points
 	wgpu::Buffer m_vertexbuffer = nullptr;

@@ -54,6 +54,8 @@ bool Camera::on_init(wgpu::Device device, wgpu::Queue queue, int width, int heig
 	Logger::log(std::format("Got k4a device: {}", (void*)&m_k4a_device));
 	m_k4a_device.start_cameras(&config);
 
+	m_calibration = m_k4a_device.get_calibration(config.depth_mode, config.color_resolution);
+
 	Logger::log("Finished opening k4a device.");
 
 	glm::uvec2 color_texture_dims;
@@ -137,6 +139,10 @@ void Camera::on_frame()
 		const k4a::image color_image = capture.get_color_image();
 		m_depth_image = capture.get_depth_image();
 
+		// TODO: move this to when pointcloud is generated, not here. Too fps hungry...
+		/*k4a::transformation transform(calibration());
+		m_depth_image = transform.depth_image_to_color_camera(capture.get_depth_image());*/
+
 		m_color_texture.update(reinterpret_cast<const BgraPixel*>(color_image.get_buffer()));
 	}
 
@@ -193,11 +199,7 @@ k4a::image* Camera::depth_image()
 
 k4a::calibration Camera::calibration()
 {
-	k4a_device_configuration_t config = K4A_DEVICE_CONFIG_INIT_DISABLE_ALL;
-	config.depth_mode = K4A_DEPTH_MODE_WFOV_2X2BINNED;
-	config.camera_fps = K4A_FRAMES_PER_SECOND_30;
-
-	return m_k4a_device.get_calibration(config.depth_mode, config.color_resolution);
+	return m_calibration;
 }
 
 

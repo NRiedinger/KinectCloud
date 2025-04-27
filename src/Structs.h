@@ -12,6 +12,8 @@
 
 #define DEFAULT_WINDOW_TITLE "DepthSplat"
 
+#define FPS 165.f
+
 #define DEFAULT_WINDOW_W 1920
 #define DEFAULT_WINDOW_H 1080
 
@@ -19,6 +21,10 @@
 #define GUI_CAPTURELIST_HEIGHT 500.f
 #define GUI_CAPTURELIST_INDENT 20.f
 #define GUI_CONSOLE_HEIGHT 300.f
+
+#define POINTCLOUD_CAMERA_PLANE_NEAR .01f
+#define POINTCLOUD_CAMERA_PLANE_FAR 10000.f
+#define POINTCLOUD_MAX_NUM 5
 
 #define POINTCLOUD_COLOR_RESOLUTION K4A_COLOR_RESOLUTION_1080P
 #define POINTCLOUD_DEPTH_MODE K4A_DEPTH_MODE_WFOV_2X2BINNED
@@ -69,7 +75,7 @@ struct VertexAttributes {
 
 struct CameraState {
 	glm::vec2 angles = { .8f, .5f };
-	float zoom = -7.f;
+	float zoom = -5.f;
 	
 
 	glm::vec3 get_camera_position() {

@@ -46,6 +46,7 @@ void CameraCaptureSequence::on_capture()
 	capture->is_selected = false;
 	capture->calibration = m_calibration;
 	capture->depth_image = k4a::image(*m_depth_image);
+	capture->transform = glm::mat4(1.f);
 	m_captures.push_back(capture);
 	CameraCaptureSequence::s_capturelist_updated = true;
 }

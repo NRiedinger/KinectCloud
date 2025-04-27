@@ -36,6 +36,7 @@ private:
 	wgpu::Buffer m_depthbuffer = NULL;
 	Texture m_color_texture;
 	k4a::image m_depth_image;
+	k4a::calibration m_calibration;
 	const std::chrono::milliseconds TIMEOUT_IN_MS = std::chrono::milliseconds(1000);
 };
 

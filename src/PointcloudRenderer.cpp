@@ -66,8 +66,18 @@ void PointcloudRenderer::on_resize(int width, int height)
 	init_depthbuffer();
 }
 
-void PointcloudRenderer::add_pointcloud(Pointcloud* pc) {
+Pointcloud* PointcloudRenderer::add_pointcloud(Pointcloud* pc) {
 	m_pointclouds.push_back(pc);
+
+	return pc;
+}
+
+void PointcloudRenderer::remove_pointcloud(Pointcloud* ptr_to_remove)
+{
+	m_pointclouds.erase(
+		std::remove(m_pointclouds.begin(), m_pointclouds.end(), ptr_to_remove),
+		m_pointclouds.end()
+	);
 }
 
 void PointcloudRenderer::clear_pointclouds()
@@ -76,6 +86,20 @@ void PointcloudRenderer::clear_pointclouds()
 		delete pc;
 	}
 	m_pointclouds.clear();
+}
+
+size_t PointcloudRenderer::get_num_pointclouds()
+{
+	return m_pointclouds.size();
+}
+
+int PointcloudRenderer::get_num_vertices()
+{
+	int num = 0;
+	for (auto pc : m_pointclouds) {
+		num += pc->vertexcount();
+	}
+	return num;
 }
 
 bool PointcloudRenderer::is_initialized()
@@ -181,15 +205,23 @@ bool PointcloudRenderer::init_renderpipeline()
 
 
 	// binding layout
-	wgpu::BindGroupLayoutEntry bindgroup_layout_entry = wgpu::Default;
-	bindgroup_layout_entry.binding = 0;
-	bindgroup_layout_entry.visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
-	bindgroup_layout_entry.buffer.type = wgpu::BufferBindingType::Uniform;
-	bindgroup_layout_entry.buffer.minBindingSize = sizeof(Uniforms::RenderUniforms);
+	wgpu::BindGroupLayoutEntry bindgroup_layout_entries[] = {wgpu::Default, wgpu::Default};
+	//wgpu::BindGroupLayoutEntry bindgroup_layout_entry = wgpu::Default;
+	bindgroup_layout_entries[0].binding = 0;
+	bindgroup_layout_entries[0].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
+	bindgroup_layout_entries[0].buffer.type = wgpu::BufferBindingType::Uniform;
+	bindgroup_layout_entries[0].buffer.minBindingSize = sizeof(Uniforms::RenderUniforms);
+	bindgroup_layout_entries[0].buffer.hasDynamicOffset = false;
+
+	bindgroup_layout_entries[1].binding = 1;
+	bindgroup_layout_entries[1].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
+	bindgroup_layout_entries[1].buffer.type = wgpu::BufferBindingType::Uniform;
+	bindgroup_layout_entries[1].buffer.minBindingSize = sizeof(glm::mat4);
+	bindgroup_layout_entries[1].buffer.hasDynamicOffset = true;
 
 	wgpu::BindGroupLayoutDescriptor bindgroup_layout_desc{};
-	bindgroup_layout_desc.entryCount = 1;
-	bindgroup_layout_desc.entries = &bindgroup_layout_entry;
+	bindgroup_layout_desc.entryCount = 2;
+	bindgroup_layout_desc.entries = bindgroup_layout_entries;
 	m_bindgroup_layout = m_device.createBindGroupLayout(bindgroup_layout_desc);
 	if (!m_bindgroup_layout) {
 		Logger::log("Could not create bind group layout!", LoggingSeverity::Error);
@@ -228,24 +260,36 @@ void PointcloudRenderer::terminate_renderpipeline()
 
 bool PointcloudRenderer::init_uniforms()
 {
-	wgpu::BufferDescriptor bufferDesc{};
-	bufferDesc.size = sizeof(Uniforms::RenderUniforms);
-	bufferDesc.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform;
-	bufferDesc.mappedAtCreation = false;
-	m_renderuniform_buffer = m_device.createBuffer(bufferDesc);
+	wgpu::BufferDescriptor buffer_desc{};
+	buffer_desc.size = sizeof(Uniforms::RenderUniforms);
+	buffer_desc.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform;
+	buffer_desc.mappedAtCreation = false;
+	m_renderuniform_buffer = m_device.createBuffer(buffer_desc);
 	if (!m_renderuniform_buffer) {
 		std::cerr << "Could not create render uniform buffer!" << std::endl;
 		return false;
 	}
 
 	// initial uniform values
-	m_renderuniforms.modelMatrix = glm::scale(glm::mat4(1.0), glm::vec3(0.1));
-	/*m_renderuniforms.viewMatrix = glm::lookAt(glm::vec3(-5.f, -5.f, 3.f), glm::vec3(0.0f), glm::vec3(0, 0, 1));
-	m_renderuniforms.projectionMatrix = glm::perspective((float)(45 * M_PI / 180), (float)(m_window_width / m_window_height), 0.01f, 100.0f);*/
+	m_renderuniforms.modelMatrix = glm::scale(glm::mat4(1.0), glm::vec3(1.0));
 	m_queue.writeBuffer(m_renderuniform_buffer, 0, &m_renderuniforms, sizeof(Uniforms::RenderUniforms));
 
 	update_viewmatrix();
 	update_projectionmatrix();
+
+	wgpu::BufferDescriptor transform_buffer_desc{};
+	transform_buffer_desc.size = sizeof(glm::mat4) * POINTCLOUD_MAX_NUM;
+	transform_buffer_desc.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform;
+	transform_buffer_desc.mappedAtCreation = false;
+	m_transform_buffer = m_device.createBuffer(transform_buffer_desc);
+	if (!m_transform_buffer) {
+		std::cerr << "Could not create transform buffer!" << std::endl;
+	}
+	glm::mat4 default_transform(1.f);
+	for (int i = 0; i < POINTCLOUD_MAX_NUM; i++) {
+		uint32_t ubo_offset = sizeof(glm::mat4) * i;
+		m_queue.writeBuffer(m_transform_buffer, ubo_offset, &default_transform, sizeof(glm::mat4));
+	}
 
 	return true;
 }
@@ -258,16 +302,21 @@ void PointcloudRenderer::terminate_uniforms()
 
 bool PointcloudRenderer::init_bindgroup()
 {
-	wgpu::BindGroupEntry binding;
-	binding.binding = 0;
-	binding.buffer = m_renderuniform_buffer;
-	binding.offset = 0;
-	binding.size = sizeof(Uniforms::RenderUniforms);
+	wgpu::BindGroupEntry bindings[] = {wgpu::Default, wgpu::Default};
+	bindings[0].binding = 0;
+	bindings[0].buffer = m_renderuniform_buffer;
+	bindings[0].offset = 0;
+	bindings[0].size = sizeof(Uniforms::RenderUniforms);
+
+	bindings[1].binding = 1;
+	bindings[1].buffer = m_transform_buffer;
+	bindings[1].offset = 0;
+	bindings[1].size = sizeof(glm::mat4);
 
 	wgpu::BindGroupDescriptor bindGroupDesc{};
 	bindGroupDesc.layout = m_bindgroup_layout;
-	bindGroupDesc.entryCount = 1;
-	bindGroupDesc.entries = &binding;
+	bindGroupDesc.entryCount = 2;
+	bindGroupDesc.entries = bindings;
 	m_bindgroup = m_device.createBindGroup(bindGroupDesc);
 	if (!m_bindgroup) {
 		std::cerr << "Could not create bind group!" << std::endl;
@@ -330,7 +379,7 @@ void PointcloudRenderer::terminate_rendertarget()
 void PointcloudRenderer::update_projectionmatrix()
 {
 	float ratio = m_width / m_height;
-	m_renderuniforms.projectionMatrix = glm::perspective((float)(45 * M_PI / 180), ratio, .01f, 1000.f);
+	m_renderuniforms.projectionMatrix = glm::perspective((float)(45 * M_PI / 180), ratio, POINTCLOUD_CAMERA_PLANE_NEAR, POINTCLOUD_CAMERA_PLANE_FAR);
 	m_queue.writeBuffer(m_renderuniform_buffer, offsetof(Uniforms::RenderUniforms, projectionMatrix), &m_renderuniforms.projectionMatrix, sizeof(Uniforms::RenderUniforms::projectionMatrix));
 }
 
@@ -375,6 +424,8 @@ void PointcloudRenderer::handle_pointcloud_mouse_events()
 	}
 }
 
+
+
 void PointcloudRenderer::on_frame()
 {
 	wgpu::TextureView next_texture = m_rendertarget_texture_view;
@@ -382,9 +433,7 @@ void PointcloudRenderer::on_frame()
 		return;
 	}
 
-	wgpu::CommandEncoderDescriptor command_encoder_desc{};
-	command_encoder_desc.label = "command encoder";
-	wgpu::CommandEncoder encoder = m_device.createCommandEncoder(command_encoder_desc);
+	
 
 	wgpu::RenderPassDescriptor renderpass_desc{};
 
@@ -414,14 +463,35 @@ void PointcloudRenderer::on_frame()
 
 	renderpass_desc.timestampWrites = nullptr;
 
-	wgpu::RenderPassEncoder renderpass = encoder.beginRenderPass(renderpass_desc);
+	wgpu::CommandEncoderDescriptor command_encoder_desc{};
+	command_encoder_desc.label = "command encoder";
+	wgpu::CommandEncoder encoder = m_device.createCommandEncoder(command_encoder_desc);
 
+	wgpu::RenderPassEncoder passEncoder = encoder.beginRenderPass(renderpass_desc);
+
+	int i = 0;
 	for (auto pc : m_pointclouds) {
-		renderpass.setPipeline(m_renderpipeline);
-		renderpass.setVertexBuffer(0, pc->vertexbuffer(), 0, pc->vertexbuffer().getSize()/*m_vertexCount * sizeof(VertexAttributes)*/);
-		renderpass.setBindGroup(0, m_bindgroup, 0, nullptr);
-		renderpass.draw(pc->vertexcount(), 1, 0, 0);
+		glm::mat4 model = *pc->transform();
+		uint32_t ubo_offset = sizeof(glm::mat4) * i;
+		m_queue.writeBuffer(m_transform_buffer, ubo_offset, &model, sizeof(glm::mat4));
+
+		passEncoder.setPipeline(m_renderpipeline);
+		passEncoder.setVertexBuffer(0, pc->vertexbuffer(), 0, pc->vertexbuffer().getSize());
+		passEncoder.setBindGroup(0, m_bindgroup, 1, &ubo_offset);
+		passEncoder.draw(pc->vertexcount(), 1, 0, 0);
+
+		i++;
 	}
+
+	passEncoder.end();
+	passEncoder.release();
+
+	wgpu::CommandBufferDescriptor commandbuffer_desc{};
+	commandbuffer_desc.label = "command buffer";
+	wgpu::CommandBuffer command = encoder.finish(commandbuffer_desc);
+
+	encoder.release();
+	m_queue.submit(command);
 
 	ImGui::Begin("Pointcloud Window", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
 	ImGui::SetWindowPos({ GUI_MENU_WIDTH, 0.f });
@@ -433,17 +503,6 @@ void PointcloudRenderer::on_frame()
 	handle_pointcloud_mouse_events();
 
 	ImGui::End();
-
-
-	renderpass.end();
-	renderpass.release();
-
-	wgpu::CommandBufferDescriptor commandbuffer_desc{};
-	commandbuffer_desc.label = "command buffer";
-	wgpu::CommandBuffer command = encoder.finish(commandbuffer_desc);
-
-	encoder.release();
-	m_queue.submit(command);
 }
 
 bool PointcloudRenderer::init_depthbuffer()

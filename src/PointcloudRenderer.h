@@ -16,8 +16,11 @@ public:
 
 	void on_resize(int width, int height);
 
-	void add_pointcloud(Pointcloud* pc);
+	Pointcloud* add_pointcloud(Pointcloud* pc);
+	void remove_pointcloud(Pointcloud* pointer);
 	void clear_pointclouds();
+	size_t get_num_pointclouds();
+	int get_num_vertices();
 
 private:
 	bool init_rendertarget();
@@ -54,6 +57,7 @@ private:
 	// render uniforms
 	Uniforms::RenderUniforms m_renderuniforms;
 	wgpu::Buffer m_renderuniform_buffer;
+	wgpu::Buffer m_transform_buffer;
 
 	// bind group
 	wgpu::BindGroup m_bindgroup = nullptr;

@@ -2,8 +2,11 @@
 #include <string>
 #include <memory>
 #include "Texture.h"
+#include "Pointcloud.h"
 
 #include <k4a/k4a.hpp>
+#include <glm/glm.hpp>
+#include <glm/ext.hpp>
 
 #pragma once
 
@@ -17,6 +20,7 @@ public:
 	}
 
 	std::string name;
+	bool is_selected;
 	Texture* image_color_data;
 	int image_color_width;
 	int image_color_height;
@@ -25,7 +29,8 @@ public:
 	int image_depth_height;
 	k4a::image depth_image;
 	k4a::calibration calibration;
-	bool is_selected;
+	glm::mat4 transform;
+	Pointcloud* data_pointer;
 };
 
 class CameraCaptureSequence

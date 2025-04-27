@@ -21,11 +21,12 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 
-Pointcloud::Pointcloud(wgpu::Device device, wgpu::Queue queue, k4a::image depth_image, k4a::calibration calibration) {
+Pointcloud::Pointcloud(wgpu::Device device, wgpu::Queue queue, k4a::image depth_image, k4a::calibration calibration, glm::mat4* transform) {
 	m_device = device;
 	m_queue = queue;
 	m_depth_image = depth_image;
 	m_calibration = calibration;
+	m_transform = transform;
 
 	capture_point_cloud();
 }
@@ -39,45 +40,26 @@ Pointcloud::~Pointcloud()
 
 void Pointcloud::capture_point_cloud()
 {
-	//k4a_device_configuration_t config = K4A_DEVICE_CONFIG_INIT_DISABLE_ALL;
-	//config.depth_mode = K4A_DEPTH_MODE_WFOV_2X2BINNED;
-	//config.camera_fps = K4A_FRAMES_PER_SECOND_30;
-
 	if (!m_depth_image)
 	{
 		Logger::log("Tried to capture empty depth image.", LoggingSeverity::Error);
 		return;
 	}
-
-	//k4a::calibration calibration = m_k4a_device.get_calibration(config.depth_mode, config.color_resolution);
-
-	k4a::calibration calibration = m_calibration;
 	
 	k4a::image xy_table = k4a::image::create(K4A_IMAGE_FORMAT_CUSTOM,
-											 calibration.depth_camera_calibration.resolution_width,
-											 calibration.depth_camera_calibration.resolution_height,
-											 calibration.depth_camera_calibration.resolution_width * (int)sizeof(k4a_float2_t));
+											 m_calibration.depth_camera_calibration.resolution_width,
+											 m_calibration.depth_camera_calibration.resolution_height,
+											 m_calibration.depth_camera_calibration.resolution_width * (int)sizeof(k4a_float2_t));
 
-	create_xy_table(&calibration, xy_table);
+
+	create_xy_table(&m_calibration, xy_table);
 
 	k4a::image point_cloud = k4a::image::create(K4A_IMAGE_FORMAT_CUSTOM,
-												calibration.depth_camera_calibration.resolution_width,
-												calibration.depth_camera_calibration.resolution_height,
-												calibration.depth_camera_calibration.resolution_width * (int)sizeof(k4a_float3_t));
+												m_calibration.depth_camera_calibration.resolution_width,
+												m_calibration.depth_camera_calibration.resolution_height,
+												m_calibration.depth_camera_calibration.resolution_width * (int)sizeof(k4a_float3_t));
 
-	//m_k4a_device.start_cameras(&config);
 
-	//k4a::capture capture = NULL;
-	//if (!m_k4a_device.get_capture(&capture, TIMEOUT_IN_MS)) {
-	//	std::cerr << "Timed out waiting for a capture" << std::endl;
-	//	return;
-	//}
-
-	//k4a::image depth_image = capture.get_depth_image();
-	//if (!depth_image) {
-	//	std::cerr << "Failed to get depth image from capture" << std::endl;
-	//	return;
-	//}
 
 	int point_count;
 	generate_point_cloud(m_depth_image, xy_table, point_cloud, &point_count);

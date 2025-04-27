@@ -37,6 +37,20 @@ private:
 	void render();
 
 	void render_capture_menu();
+	void render_debug();
+	void render_console();
+	void render_content();
+	void render_menu();
+
+	inline glm::vec3 quat_to_euler_degrees(const glm::quat& q)
+	{
+		return glm::degrees(glm::eulerAngles(q));
+	}
+
+	inline glm::quat euler_degrees_to_quat(const glm::vec3& euler_degrees)
+	{
+		return glm::quat(glm::radians(euler_degrees));
+	}
 
 private:
 	std::string m_window_title = DEFAULT_WINDOW_TITLE;

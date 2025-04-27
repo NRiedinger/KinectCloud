@@ -1,5 +1,6 @@
 #include "Application.h"
 #include <format>
+#include <thread>
 
 #include <imgui.h>
 #include <backends/imgui_impl_wgpu.h>
@@ -53,6 +54,22 @@ void Application::on_finish()
 
 void Application::on_frame()
 {
+	/*std::chrono::system_clock::time_point time_point_begin = std::chrono::system_clock::now();
+	std::chrono::system_clock::time_point time_point_end = std::chrono::system_clock::now();
+
+	time_point_begin = std::chrono::system_clock::now();
+	std::chrono::duration<double, std::milli > work_time = time_point_begin - time_point_end;
+
+	auto frametime_s = 1000.f / FPS;
+	if (work_time.count() < frametime_s) {
+		std::chrono::duration<double, std::milli> delta_ms(frametime_s - work_time.count());
+		auto delta_ms_duration = std::chrono::duration_cast<std::chrono::milliseconds>(delta_ms);
+		std::this_thread::sleep_for(std::chrono::milliseconds(delta_ms_duration.count()));
+	}
+	time_point_end = std::chrono::system_clock::now();
+	std::chrono::duration<double, std::milli> sleep_time = time_point_end - time_point_begin;*/
+
+
 	if (!m_window) {
 		throw std::exception("Attempted to use uninitialized window!");
 	}
@@ -227,7 +244,7 @@ bool Application::init_swapchain()
 	swapchain_desc.height = static_cast<uint32_t>(m_window_height);
 	swapchain_desc.usage = wgpu::TextureUsage::RenderAttachment;
 	swapchain_desc.format = m_swapchain_format;
-	//swapChainDesc.presentMode = wgpu::PresentMode::Fifo;
+	//swapchain_desc.presentMode = wgpu::PresentMode::Fifo;
 	swapchain_desc.presentMode = wgpu::PresentMode::Mailbox;
 	m_swapchain = m_device.createSwapChain(m_surface, swapchain_desc);
 	if (!m_swapchain) {
@@ -341,78 +358,10 @@ void Application::after_frame()
 
 void Application::render()
 {
-	ImGui::Begin("Menu", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
-	ImGui::SetWindowPos({ 0.f, 0.f });
-	ImGui::SetWindowSize({ GUI_MENU_WIDTH, (float)m_window_height });
-
-	auto app_state = m_app_state;
-	auto available_width = ImGui::GetContentRegionAvail();
-	ImVec4 active_button_color(ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered));
-	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
-	if (app_state == AppState::Capture)
-		ImGui::PushStyleColor(ImGuiCol_Button, active_button_color);
-
-	if (ImGui::Button("Capture", ImVec2(available_width.x / 2, 40))) {
-		m_app_state = AppState::Capture;
-	}
-
-	if (app_state == AppState::Capture)
-		ImGui::PopStyleColor();
-
-	ImGui::SameLine();
-
-	if (app_state == AppState::Edit)
-		ImGui::PushStyleColor(ImGuiCol_Button, active_button_color);
-
-	if (ImGui::Button("Edit", ImVec2(available_width.x / 2, 40))) {
-		m_app_state = AppState::Edit;
-	}
-
-	if (app_state == AppState::Edit)
-		ImGui::PopStyleColor();
-
-	ImGui::PopStyleVar();
-	
-	ImGui::SetCursorPosY(50);
-
-	render_capture_menu();
-
-	ImGui::End();
-
-
-	// render content
-	switch (m_app_state) {
-		case AppState::Capture:
-			m_camera.on_frame();
-			break;
-
-		case AppState::Edit:
-			m_renderer.on_frame();
-			break;
-
-		case AppState::Default:
-		default:
-			break;
-	}
-
-	// render console
-
-	ImGui::Begin("Console", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
-	ImGui::SetWindowPos({ GUI_MENU_WIDTH, m_window_height - GUI_CONSOLE_HEIGHT });
-	ImGui::SetWindowSize({ m_window_width - GUI_MENU_WIDTH, GUI_CONSOLE_HEIGHT });
-	
-	ImGui::BeginChild("ScrollingRegion", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
-
-	ImGui::TextUnformatted(Logger::s_buffer.str().c_str());
-
-	if (Logger::s_updated) {
-		ImGui::SetScrollHereY(1.0);
-		Logger::s_updated = false;
-	}
-	
-	ImGui::EndChild();
-
-	ImGui::End();
+	render_menu();
+	render_content();
+	render_console();
+	render_debug();
 }
 
 void Application::render_capture_menu()
@@ -425,17 +374,57 @@ void Application::render_capture_menu()
 	ImGui::Indent(GUI_CAPTURELIST_INDENT);
 
 	int i = 0;
-	for (auto capture : m_capture_sequence.captures()) {
+	Pointcloud* to_remove = nullptr;
+	for (auto& capture : m_capture_sequence.captures()) {
 		ImGui::PushID(i);
 		ImGui::Text(std::format("Capture \"{}\"", capture->name).c_str());
 		/*ImGui::Checkbox("Use pointcloud", &capture->is_selected);
 		ImGui::SameLine();*/
-		if(ImGui::Button("Add Pointcloud")) {
-			m_renderer.add_pointcloud(new Pointcloud(m_device, m_queue, capture->depth_image, capture->calibration));
+		bool is_selected = capture->is_selected;
+		if(ImGui::Button(capture->is_selected ? "Remove" : "Add")) {
+			if (capture->is_selected) {
+				to_remove = capture->data_pointer;
+				//Logger::log(std::format("index to remove: {}", index_to_remove));
+				capture->is_selected = false;
+			}
+			else {
+				if (m_renderer.get_num_pointclouds() < POINTCLOUD_MAX_NUM) {
+					capture->data_pointer = m_renderer.add_pointcloud(new Pointcloud(m_device, m_queue, capture->depth_image, capture->calibration, &capture->transform));
+					capture->is_selected = true;
+				}
+				else {
+					Logger::log(std::format("Maximum number of pointclouds reached ({})", POINTCLOUD_MAX_NUM), LoggingSeverity::Error);
+				}
+			}
 		}
 		ImGui::Separator();
+
+		if (m_app_state == AppState::Edit && is_selected) {
+
+			glm::vec3 scale, translation, skew;
+			glm::vec4 perspective;
+			glm::quat rotation_rad;
+			glm::decompose(capture->transform, scale, rotation_rad, translation, skew, perspective);
+
+			glm::vec3 rotation_deg = quat_to_euler_degrees(rotation_rad);
+
+			ImGui::SliderFloat3("Position", &translation.x, -500.f, 500.f);
+			ImGui::SliderFloat3("Rotation", &rotation_deg.x, -180.f, 180.f);
+			ImGui::SliderFloat("Scale", &scale.x, .1f, 5.f);
+
+			glm::mat4 new_transform = glm::translate(glm::mat4(1.f), translation) *
+				glm::toMat4(euler_degrees_to_quat(rotation_deg)) *
+				glm::scale(glm::mat4(1.f), glm::vec3(scale.x));
+
+			capture->transform = new_transform;
+		}
+
 		ImGui::PopID();
 		i++;
+	}
+
+	if (to_remove) {
+		m_renderer.remove_pointcloud(to_remove);
 	}
 
 	if (CameraCaptureSequence::s_capturelist_updated) {
@@ -466,5 +455,99 @@ void Application::render_capture_menu()
 			m_renderer.clear_pointclouds();
 		}
 	}
+	
+}
+
+void Application::render_debug()
+{
+	ImGui::Begin("Debug", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
+	ImGui::SetWindowPos({ 0, m_window_height - GUI_CONSOLE_HEIGHT });
+	ImGui::SetWindowSize({ GUI_MENU_WIDTH, GUI_CONSOLE_HEIGHT });
+
+	auto io = ImGui::GetIO();
+	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+	ImGui::Text("Number of captures: %d", m_capture_sequence.captures().size());
+	ImGui::Text("Number of pointclouds: %d", m_renderer.get_num_pointclouds());
+	ImGui::Text("Number of points: %d", m_renderer.get_num_vertices());
+
+	ImGui::End();
+}
+
+void Application::render_console()
+{
+	ImGui::Begin("Console", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
+	ImGui::SetWindowPos({ GUI_MENU_WIDTH, m_window_height - GUI_CONSOLE_HEIGHT });
+	ImGui::SetWindowSize({ m_window_width - GUI_MENU_WIDTH, GUI_CONSOLE_HEIGHT });
+
+	ImGui::BeginChild("ScrollingRegion", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
+
+	ImGui::TextUnformatted(Logger::s_buffer.str().c_str());
+
+	if (Logger::s_updated) {
+		ImGui::SetScrollHereY(1.0);
+		Logger::s_updated = false;
+	}
+
+	ImGui::EndChild();
+
+	ImGui::End();
+}
+
+void Application::render_content()
+{
+	switch (m_app_state) {
+		case AppState::Capture:
+			m_camera.on_frame();
+			break;
+
+		case AppState::Edit:
+			m_renderer.on_frame();
+			break;
+
+		case AppState::Default:
+		default:
+			break;
+	}
+}
+
+void Application::render_menu()
+{
+	ImGui::Begin("Menu", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
+	ImGui::SetWindowPos({ 0.f, 0.f });
+	ImGui::SetWindowSize({ GUI_MENU_WIDTH, (float)m_window_height - GUI_CONSOLE_HEIGHT });
+
+	auto app_state = m_app_state;
+	auto available_width = ImGui::GetContentRegionAvail();
+	ImVec4 active_button_color(ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered));
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+	if (app_state == AppState::Capture)
+		ImGui::PushStyleColor(ImGuiCol_Button, active_button_color);
+
+	if (ImGui::Button("Capture", ImVec2(available_width.x / 2, 40))) {
+		m_app_state = AppState::Capture;
+	}
+
+	if (app_state == AppState::Capture)
+		ImGui::PopStyleColor();
+
+	ImGui::SameLine();
+
+	if (app_state == AppState::Edit)
+		ImGui::PushStyleColor(ImGuiCol_Button, active_button_color);
+
+	if (ImGui::Button("Edit", ImVec2(available_width.x / 2, 40))) {
+		m_app_state = AppState::Edit;
+	}
+
+	if (app_state == AppState::Edit)
+		ImGui::PopStyleColor();
+
+	ImGui::PopStyleVar();
+
+	ImGui::SetCursorPosY(50);
+
+	render_capture_menu();
+
+	ImGui::End();
 }
 
