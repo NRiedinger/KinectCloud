@@ -21,12 +21,13 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 
-Pointcloud::Pointcloud(wgpu::Device device, wgpu::Queue queue, k4a::image depth_image, k4a::calibration calibration, glm::mat4* transform) {
+Pointcloud::Pointcloud(wgpu::Device device, wgpu::Queue queue, k4a::image depth_image, k4a::calibration calibration, glm::mat4* transform, glm::quat cam_orientation) {
 	m_device = device;
 	m_queue = queue;
 	m_depth_image = depth_image;
 	m_calibration = calibration;
 	m_transform = transform;
+	m_cam_orientation = cam_orientation; 
 
 	capture_point_cloud();
 }
@@ -110,6 +111,11 @@ void Pointcloud::generate_point_cloud(const k4a::image depth_image, const k4a::i
 			point_cloud_data[i].xyz.y = xy_table_data[i].xy.y * (float)depth_data[i];
 			point_cloud_data[i].xyz.z = (float)depth_data[i];
 			(*point_count)++;
+
+			auto len = glm::length(glm::vec3(point_cloud_data[i].xyz.x, point_cloud_data[i].xyz.y, point_cloud_data[i].xyz.z));
+			if (len > m_furthest_point) {
+				m_furthest_point = len;
+			}
 		}
 		else {
 			point_cloud_data[i].xyz.x = nanf("");

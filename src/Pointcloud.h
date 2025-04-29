@@ -7,7 +7,7 @@
 
 class Pointcloud {
 public:
-	Pointcloud(wgpu::Device device, wgpu::Queue queue, k4a::image depth_image, k4a::calibration calibration, glm::mat4* transform);
+	Pointcloud(wgpu::Device device, wgpu::Queue queue, k4a::image depth_image, k4a::calibration calibration, glm::mat4* transform, glm::quat cam_orientation);
 	~Pointcloud();
 
 	inline wgpu::Buffer vertexbuffer() {
@@ -20,6 +20,14 @@ public:
 
 	inline glm::mat4* transform() {
 		return m_transform;
+	}
+
+	inline glm::quat camera_orienation() {
+		return m_cam_orientation;
+	}
+
+	inline float furthest_point() {
+		return m_furthest_point;
 	}
 
 private:
@@ -37,7 +45,8 @@ private:
 	k4a::image m_transformed_depth_image;
 	k4a::calibration m_calibration;
 	glm::mat4* m_transform;
-	
+	glm::quat m_cam_orientation;
+	float m_furthest_point = 1.f;
 
 	// points
 	wgpu::Buffer m_vertexbuffer = nullptr;

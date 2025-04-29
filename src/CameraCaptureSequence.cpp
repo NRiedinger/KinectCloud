@@ -11,13 +11,14 @@
 #define __STDC_LIB_EXT1__
 #include "utils/stb_image_write.h"
 
-bool CameraCaptureSequence::on_init(Texture* color_texture_pointer, k4a::image* depth_image, k4a::calibration calibration)
+bool CameraCaptureSequence::on_init(Texture* color_texture_pointer, k4a::image* depth_image, k4a::calibration calibration, k4a::device* k4a_device_ptr)
 {
     m_captures.clear();
     m_initialized = true;
-	m_color_texture_pointer = color_texture_pointer;
-	m_depth_image = depth_image;
+	m_color_texture_ptr = color_texture_pointer;
+	m_depth_image_ptr = depth_image;
 	m_calibration = calibration;
+	m_k4a_device_ptr = k4a_device_ptr;
 
     return true;
 }
@@ -31,35 +32,12 @@ void CameraCaptureSequence::on_terminate()
     m_initialized = false;
 }
 
-void CameraCaptureSequence::on_capture()
-{
-	std::string capture_name = std::format("{}", m_captures.size());
-	std::string filepath = OUTPUT_DIR + std::format("/{}.png", capture_name);
-
-	CameraCapture* capture = new CameraCapture();
-	capture->name = capture_name;
-	capture->image_color_width = m_color_texture_pointer->width();
-	capture->image_color_height = m_color_texture_pointer->height();
-	if (!m_color_texture_pointer->save_to_buffer((unsigned char**)&capture->image_color_data)) {
-		Logger::log("Failed to save color texture to capture data buffer", LoggingSeverity::Error);
-	}
-	capture->is_selected = false;
-	capture->calibration = m_calibration;
-	capture->depth_image = k4a::image(*m_depth_image);
-	capture->transform = glm::mat4(1.f);
-	m_captures.push_back(capture);
-	CameraCaptureSequence::s_capturelist_updated = true;
-}
 
 bool CameraCaptureSequence::is_initialized()
 {
     return m_initialized;
 }
 
-void CameraCaptureSequence::render_menu()
-{
-	
-}
 
 void CameraCaptureSequence::save_sequence()
 {
@@ -105,5 +83,10 @@ std::vector<std::string> CameraCaptureSequence::get_captures_names()
 std::vector<CameraCapture*>& CameraCaptureSequence::captures()
 {
 	return m_captures;
+}
+
+void CameraCaptureSequence::add_capture(CameraCapture* capture)
+{
+	m_captures.push_back(capture);
 }
 

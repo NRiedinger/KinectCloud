@@ -3,6 +3,11 @@
 
 #include "Structs.h"
 #include "Pointcloud.h"
+#include "Logger.h"
+
+#include <imgui.h>
+
+
 
 #pragma once
 
@@ -21,6 +26,7 @@ public:
 	void clear_pointclouds();
 	size_t get_num_pointclouds();
 	int get_num_vertices();
+	float get_futhest_point();
 
 private:
 	bool init_rendertarget();
@@ -43,6 +49,17 @@ private:
 	void update_viewmatrix();
 	void handle_pointcloud_mouse_events();
 	
+	void draw_gizmos() {
+		static auto project = [this](glm::vec3 p) -> ImVec2 {
+			auto screen_pos = Util::project_point(m_renderuniforms.projectionMatrix, m_renderuniforms.viewMatrix, p, (float)m_width, (float)m_height);
+			return { GUI_MENU_WIDTH + screen_pos.x, screen_pos.y };
+		};
+
+		auto drawlist = ImGui::GetWindowDrawList();
+		drawlist->AddLine(project({ 0.f, 0.f, 0.f }), project({ 10.f, 0.f, 0.f }), IM_COL32(255, 0, 0, 255));
+		drawlist->AddLine(project({ 0.f, 0.f, 0.f }), project({ 0.f, 10.f, 0.f }), IM_COL32(0, 255, 0, 255));
+		drawlist->AddLine(project({ 0.f, 0.f, 0.f }), project({ 0.f, 0.f, 10.f }), IM_COL32(0, 0, 255, 255));
+	}
 
 private:
 	std::vector<Pointcloud*> m_pointclouds;

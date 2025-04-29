@@ -14,15 +14,24 @@ public:
 	void on_terminate();
 	bool is_initialized();
 	void on_resize(int width, int height);
-
+	void update_movement();
+	void calibrate_sensors();
 
 	Texture* color_texture_ptr();
 	k4a::image* depth_image();
 	k4a::calibration calibration();
 
-private:
+	inline k4a::device* device() {
+		return &m_k4a_device;
+	}
 
+	inline glm::mat4 delta_transform() {
+		return m_delta_transform;
+	}
 
+	inline glm::quat orientation() {
+		return m_orientation;
+	}
 
 private:
 	bool m_initialized = false;
@@ -37,6 +46,16 @@ private:
 	Texture m_color_texture;
 	k4a::image m_depth_image;
 	k4a::calibration m_calibration;
+	glm::mat4 m_delta_transform = glm::mat4(1.f);
+	glm::quat m_orientation = glm::quat(1, 0, 0, 0);
+	glm::vec3 m_position = glm::vec3(0.f);
+	glm::vec3 m_velocity = glm::vec3(0.f);
+
+	int64_t m_last_ts = -1;
 	const std::chrono::milliseconds TIMEOUT_IN_MS = std::chrono::milliseconds(1000);
+
+	// calibrate imu
+	glm::vec3 m_acc_noise = glm::vec3(0.f);
+	glm::vec3 m_gyro_noise = glm::vec3(0.f);
 };
 

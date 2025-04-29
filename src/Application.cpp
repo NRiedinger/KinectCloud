@@ -33,7 +33,7 @@ bool Application::on_init()
 	if (!m_camera.on_init(m_device, m_queue, m_window_width - GUI_MENU_WIDTH, m_window_height - GUI_CONSOLE_HEIGHT))
 		return false;
 
-	if (!m_capture_sequence.on_init(m_camera.color_texture_ptr(), m_camera.depth_image(), m_camera.calibration()))
+	if (!m_capture_sequence.on_init(m_camera.color_texture_ptr(), m_camera.depth_image(), m_camera.calibration(), m_camera.device()))
 		return false;
 	
 	if(!m_renderer.on_init(m_device, m_queue, m_window_width - GUI_MENU_WIDTH, m_window_height - GUI_CONSOLE_HEIGHT))
@@ -106,6 +106,27 @@ void Application::on_resize()
 
 	if (m_renderer.is_initialized())
 		m_renderer.on_resize(m_window_width - GUI_MENU_WIDTH, m_window_height - GUI_CONSOLE_HEIGHT);
+}
+
+void Application::capture()
+{
+	CameraCapture* capture = new CameraCapture();
+
+	std::string capture_name = std::format("{}", m_capture_sequence.captures().size());
+
+	capture->name = capture_name;
+	capture->image_color_width = m_camera.color_texture_ptr()->width();
+	capture->image_color_height = m_camera.color_texture_ptr()->height();
+	if (!m_camera.color_texture_ptr()->save_to_buffer((unsigned char**)&capture->image_color_data)) {
+		Logger::log("Failed to save color texture to capture data buffer", LoggingSeverity::Error);
+	}
+	capture->is_selected = false;
+	capture->calibration = m_camera.calibration();
+	capture->depth_image = k4a::image(*m_camera.depth_image());
+	capture->transform = glm::mat4(1.f);
+	capture->camera_orientation = glm::quat(m_camera.orientation());
+	m_capture_sequence.add_capture(capture);
+	CameraCaptureSequence::s_capturelist_updated = true;
 }
 
 bool Application::init_window_and_device()
@@ -367,6 +388,10 @@ void Application::render()
 void Application::render_capture_menu()
 {
 	ImGui::Text("Camera Captures");
+	ImGui::SameLine();
+	if (ImGui::Button("Calibrate")) {
+		m_camera.calibrate_sensors();
+	}
 
 	ImGui::Separator();
 
@@ -378,18 +403,13 @@ void Application::render_capture_menu()
 	for (auto& capture : m_capture_sequence.captures()) {
 		ImGui::PushID(i);
 		ImGui::Text(std::format("Capture \"{}\"", capture->name).c_str());
-		/*ImGui::Checkbox("Use pointcloud", &capture->is_selected);
-		ImGui::SameLine();*/
-		bool is_selected = capture->is_selected;
-		if(ImGui::Button(capture->is_selected ? "Remove" : "Add")) {
-			if (capture->is_selected) {
-				to_remove = capture->data_pointer;
-				//Logger::log(std::format("index to remove: {}", index_to_remove));
-				capture->is_selected = false;
-			}
-			else {
+
+		static bool is_checked = false;
+		ImGui::Checkbox("Select", &is_checked);
+		if (is_checked) {
+			if (!capture->is_selected) {
 				if (m_renderer.get_num_pointclouds() < POINTCLOUD_MAX_NUM) {
-					capture->data_pointer = m_renderer.add_pointcloud(new Pointcloud(m_device, m_queue, capture->depth_image, capture->calibration, &capture->transform));
+					capture->data_pointer = m_renderer.add_pointcloud(new Pointcloud(m_device, m_queue, capture->depth_image, capture->calibration, &capture->transform, m_camera.orientation()));
 					capture->is_selected = true;
 				}
 				else {
@@ -397,23 +417,30 @@ void Application::render_capture_menu()
 				}
 			}
 		}
+		else {
+			if (capture->is_selected) {
+				to_remove = capture->data_pointer;
+				capture->is_selected = false;
+			}
+		}
+
 		ImGui::Separator();
 
-		if (m_app_state == AppState::Edit && is_selected) {
+		if (m_app_state == AppState::Edit && capture->is_selected) {
 
 			glm::vec3 scale, translation, skew;
 			glm::vec4 perspective;
 			glm::quat rotation_rad;
 			glm::decompose(capture->transform, scale, rotation_rad, translation, skew, perspective);
 
-			glm::vec3 rotation_deg = quat_to_euler_degrees(rotation_rad);
+			glm::vec3 rotation_deg = Util::quat_to_euler_degrees(rotation_rad);
 
 			ImGui::SliderFloat3("Position", &translation.x, -500.f, 500.f);
 			ImGui::SliderFloat3("Rotation", &rotation_deg.x, -180.f, 180.f);
 			ImGui::SliderFloat("Scale", &scale.x, .1f, 5.f);
 
 			glm::mat4 new_transform = glm::translate(glm::mat4(1.f), translation) *
-				glm::toMat4(euler_degrees_to_quat(rotation_deg)) *
+				glm::toMat4(Util::euler_degrees_to_quat(rotation_deg)) *
 				glm::scale(glm::mat4(1.f), glm::vec3(scale.x));
 
 			capture->transform = new_transform;
@@ -439,7 +466,7 @@ void Application::render_capture_menu()
 
 	if (m_app_state == AppState::Capture) {
 		if (ImGui::Button("Capture [space]") || ImGui::IsKeyPressed(ImGuiKey_Space)) {
-			m_capture_sequence.on_capture();
+			capture();
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Save")) {
@@ -469,6 +496,17 @@ void Application::render_debug()
 	ImGui::Text("Number of captures: %d", m_capture_sequence.captures().size());
 	ImGui::Text("Number of pointclouds: %d", m_renderer.get_num_pointclouds());
 	ImGui::Text("Number of points: %d", m_renderer.get_num_vertices());
+	ImGui::TextUnformatted(std::format("Delta transform: \n{}", Util::mat4_to_string(m_camera.delta_transform())).c_str());
+	
+	glm::vec3 scale, translation, skew;
+	glm::vec4 perspective;
+	glm::quat rotation_rad;
+	glm::decompose(m_camera.delta_transform(), scale, rotation_rad, translation, skew, perspective);
+
+	glm::vec3 rotation_deg = Util::quat_to_euler_degrees(rotation_rad);
+	ImGui::Text(std::format("{}", rotation_deg.x).c_str());
+	ImGui::Text(std::format("{}", rotation_deg.y).c_str());
+	ImGui::Text(std::format("{}", rotation_deg.z).c_str());
 
 	ImGui::End();
 }

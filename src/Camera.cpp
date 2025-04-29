@@ -12,6 +12,7 @@
 #include <sstream>
 #include <string>
 #include <format>
+#include <thread>
 
 Camera::Camera()
 {
@@ -53,6 +54,7 @@ bool Camera::on_init(wgpu::Device device, wgpu::Queue queue, int width, int heig
 	}
 	Logger::log(std::format("Got k4a device: {}", (void*)&m_k4a_device));
 	m_k4a_device.start_cameras(&config);
+	m_k4a_device.start_imu();
 
 	m_calibration = m_k4a_device.get_calibration(config.depth_mode, config.color_resolution);
 
@@ -146,6 +148,8 @@ void Camera::on_frame()
 		m_color_texture.update(reinterpret_cast<const BgraPixel*>(color_image.get_buffer()));
 	}
 
+	update_movement();
+
 	ImGui::Begin("Camera Capture Window", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
 	ImGui::SetWindowPos({ GUI_MENU_WIDTH, 0.f });
 	ImGui::SetWindowSize({ (float)m_width, (float)m_height });
@@ -171,6 +175,8 @@ void Camera::on_frame()
 void Camera::on_terminate()
 {
 	if (m_k4a_device) {
+		m_k4a_device.stop_cameras();
+		m_k4a_device.stop_imu();
 		m_k4a_device.close();
 	}
 	m_initialized = false;
@@ -185,6 +191,94 @@ void Camera::on_resize(int width, int height)
 {
 	m_width = width;
 	m_height = height;
+}
+
+void Camera::update_movement()  
+{  
+	k4a_imu_sample_t imu_sample;  
+	if (!m_k4a_device.get_imu_sample(&imu_sample)) {  
+		Logger::log("Failed to get IMU sample", LoggingSeverity::Error);  
+		return;  
+	}  
+
+	int64_t ts = imu_sample.acc_timestamp_usec;  
+	if (m_last_ts < 0) {  
+		// first sample, only get timestamp  
+		m_last_ts = ts;  
+		return;  
+	}  
+
+	float dt = float(ts - m_last_ts) * 1e-6f; // microseconds to seconds  
+	m_last_ts = ts;  
+
+	glm::vec3 w(  
+		imu_sample.gyro_sample.xyz.x - m_gyro_noise.x,
+		imu_sample.gyro_sample.xyz.y - m_gyro_noise.y,
+		imu_sample.gyro_sample.xyz.z - m_gyro_noise.z
+	);  
+	glm::quat w_quat(0, w.x, w.y, w.z);  
+	glm::quat dq = .5f * (m_orientation * w_quat) * dt;  
+	m_orientation = glm::normalize(m_orientation + dq);  
+
+	glm::vec3 a(  
+		imu_sample.acc_sample.xyz.x - m_acc_noise.x,
+		imu_sample.acc_sample.xyz.y - m_acc_noise.y,
+		imu_sample.acc_sample.xyz.z - m_acc_noise.z
+	);  
+
+	glm::vec3 gravity(0.f, 0.f, CAMERA_IMU_CALIBRATION_GRAVITY);
+	glm::vec3 a_world = m_orientation * a - gravity; 
+
+	// Set velocity to 0 if it is too low to avoid drifting  
+	const float acceleration_threshold = 0.1f;
+	auto len = glm::length(a_world);
+
+	// std::cout << Util::vec3_to_string(a_world) << len << std::endl;
+	if (len < acceleration_threshold) {
+		a_world = glm::vec3(0.f);
+	}
+
+	m_velocity += a_world * dt;  
+	m_position += m_velocity * dt;  
+
+	glm::mat4 rot_mat = glm::toMat4(m_orientation);  
+	glm::mat4 trans_mat = glm::translate(glm::mat4(1.f), m_position);  
+
+	m_delta_transform = trans_mat * rot_mat;  
+}
+
+void Camera::calibrate_sensors()
+{
+	glm::vec3 acc_temp = glm::vec3(0);
+	glm::vec3 gyro_temp = glm::vec3(0);
+
+	for (int i = 0; i < CAMERA_IMU_CALIBRATION_SAMPLE_COUNT; i++) {
+		k4a_imu_sample_t imu_sample;
+		if (!m_k4a_device.get_imu_sample(&imu_sample)) {
+			Logger::log("Failed to get IMU sample", LoggingSeverity::Error);
+			return;
+		}
+
+		acc_temp += glm::vec3(imu_sample.acc_sample.xyz.x, imu_sample.acc_sample.xyz.y, imu_sample.acc_sample.xyz.z - CAMERA_IMU_CALIBRATION_GRAVITY);
+		gyro_temp += glm::vec3(imu_sample.gyro_sample.xyz.x, imu_sample.gyro_sample.xyz.y, imu_sample.gyro_sample.xyz.z);
+		
+		std::this_thread::sleep_for(std::chrono::milliseconds(CAMERA_IMU_CALIBRATION_SAMPLE_DELAY_MS));
+	}
+
+	acc_temp /= CAMERA_IMU_CALIBRATION_SAMPLE_COUNT;
+	gyro_temp /= CAMERA_IMU_CALIBRATION_SAMPLE_COUNT;
+
+	m_acc_noise = acc_temp;
+	m_gyro_noise = gyro_temp;
+
+	m_delta_transform = glm::mat4(1.f);
+	m_orientation = glm::quat(1, 0, 0, 0);
+	m_position = glm::vec3(0.f);
+	m_velocity = glm::vec3(0.f);
+
+	Logger::log("Camera calibrated.");
+	Logger::log(std::format("m_acc_noise: {}", Util::vec3_to_string(m_acc_noise)));
+	Logger::log(std::format("m_gyro_noise: {}", Util::vec3_to_string(m_gyro_noise)));
 }
 
 Texture* Camera::color_texture_ptr()

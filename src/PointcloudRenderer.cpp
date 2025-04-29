@@ -1,11 +1,8 @@
 #include "PointcloudRenderer.h"
 
 #include "ResourceManager.h"
-#include "Logger.h"
 
-#include <imgui.h>
-#include <glm/glm.hpp>
-#include <glm/ext.hpp>
+
 #include <GLFW/glfw3.h>
 
 #include <vector>
@@ -100,6 +97,20 @@ int PointcloudRenderer::get_num_vertices()
 		num += pc->vertexcount();
 	}
 	return num;
+}
+
+float PointcloudRenderer::get_futhest_point()
+{
+	float value = 0.f;
+
+	for (auto pc : m_pointclouds) {
+		float furthest = pc->furthest_point();
+		if (furthest > value) {
+			value = furthest;
+		}
+	}
+	
+	return value;
 }
 
 bool PointcloudRenderer::is_initialized()
@@ -433,8 +444,6 @@ void PointcloudRenderer::on_frame()
 		return;
 	}
 
-	
-
 	wgpu::RenderPassDescriptor renderpass_desc{};
 
 	wgpu::RenderPassColorAttachment renderpass_color_attachment{};
@@ -471,9 +480,26 @@ void PointcloudRenderer::on_frame()
 
 	int i = 0;
 	for (auto pc : m_pointclouds) {
-		glm::mat4 model = *pc->transform();
+
+		glm::mat4 model = glm::scale(*pc->transform(), glm::vec3(100.f / get_futhest_point()));
+		glm::quat cam_orienation = pc->camera_orienation();
+
+		glm::vec3 world_up = glm::vec3(0.f, 0.f, 1.f);
+		glm::vec3 camera_up = cam_orienation * world_up;
+		float dot = glm::clamp(glm::dot(camera_up, world_up), -1.f, 1.f);
+		glm::vec3 axis = glm::cross(camera_up, world_up);
+		float angle = std::acos(dot);
+		glm::quat leveling;
+		if (glm::length2(axis) < 1e-6f) {
+			leveling = glm::quat(1, 0, 0, 0);
+		}
+		else {
+			leveling = glm::angleAxis(angle, glm::normalize(axis));
+		}
+		glm::mat4 leveled_model = glm::toMat4(leveling) * model;
+
 		uint32_t ubo_offset = sizeof(glm::mat4) * i;
-		m_queue.writeBuffer(m_transform_buffer, ubo_offset, &model, sizeof(glm::mat4));
+		m_queue.writeBuffer(m_transform_buffer, ubo_offset, &leveled_model, sizeof(glm::mat4));
 
 		passEncoder.setPipeline(m_renderpipeline);
 		passEncoder.setVertexBuffer(0, pc->vertexbuffer(), 0, pc->vertexbuffer().getSize());
@@ -501,6 +527,9 @@ void PointcloudRenderer::on_frame()
 
 	// handle input
 	handle_pointcloud_mouse_events();
+
+	draw_gizmos();
+	
 
 	ImGui::End();
 }
