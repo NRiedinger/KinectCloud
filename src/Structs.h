@@ -63,18 +63,18 @@ struct Point3D {
 
 namespace Uniforms {
 	struct RenderUniforms {
-		glm::mat4 projectionMatrix;
-		glm::mat4 viewMatrix;
-		glm::mat4 modelMatrix;
+		glm::mat4 projection_mat;
+		glm::mat4 view_mat;
+		glm::mat4 model_mat;
+		float point_size;
+		float pad[3];
 	};
 	static_assert(sizeof(RenderUniforms) % 16 == 0);
 }
 
-struct VertexAttributes {
+struct PointAttributes {
 	glm::vec3 position;
-	glm::vec3 normal;
 	glm::vec3 color;
-	glm::vec2 uv;
 };
 
 struct CameraState {

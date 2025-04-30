@@ -182,8 +182,8 @@ bool Application::init_window_and_device()
 	wgpu::RequiredLimits required_limits = wgpu::Default;
 	required_limits.limits.maxVertexAttributes = 4;
 	required_limits.limits.maxVertexBuffers = 1;
-	required_limits.limits.maxBufferSize = 150000 * sizeof(VertexAttributes);
-	required_limits.limits.maxVertexBufferArrayStride = sizeof(VertexAttributes);
+	required_limits.limits.maxBufferSize = 150000 * sizeof(PointAttributes);
+	required_limits.limits.maxVertexBufferArrayStride = sizeof(PointAttributes);
 	required_limits.limits.minStorageBufferOffsetAlignment = supported_limits.limits.minStorageBufferOffsetAlignment;
 	required_limits.limits.minUniformBufferOffsetAlignment = supported_limits.limits.minUniformBufferOffsetAlignment;
 	required_limits.limits.maxInterStageShaderComponents = 8;

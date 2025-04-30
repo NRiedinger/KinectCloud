@@ -8,7 +8,6 @@
 #include <imgui.h>
 
 
-
 #pragma once
 
 
@@ -27,6 +26,8 @@ public:
 	size_t get_num_pointclouds();
 	int get_num_vertices();
 	float get_futhest_point();
+
+	void align_pointclouds(int source_index, int target_index);
 
 private:
 	bool init_rendertarget();
@@ -48,10 +49,12 @@ private:
 	void update_projectionmatrix();
 	void update_viewmatrix();
 	void handle_pointcloud_mouse_events();
+
+	
 	
 	void draw_gizmos() {
 		static auto project = [this](glm::vec3 p) -> ImVec2 {
-			auto screen_pos = Util::project_point(m_renderuniforms.projectionMatrix, m_renderuniforms.viewMatrix, p, (float)m_width, (float)m_height);
+			auto screen_pos = Util::project_point(m_renderuniforms.projection_mat, m_renderuniforms.view_mat, p, (float)m_width, (float)m_height);
 			return { GUI_MENU_WIDTH + screen_pos.x, screen_pos.y };
 		};
 

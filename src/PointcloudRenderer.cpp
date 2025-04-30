@@ -5,6 +5,7 @@
 
 #include <GLFW/glfw3.h>
 
+
 #include <vector>
 #include <unordered_map>
 #include <string>
@@ -94,7 +95,7 @@ int PointcloudRenderer::get_num_vertices()
 {
 	int num = 0;
 	for (auto pc : m_pointclouds) {
-		num += pc->vertexcount();
+		num += pc->pointcount();
 	}
 	return num;
 }
@@ -111,6 +112,11 @@ float PointcloudRenderer::get_futhest_point()
 	}
 	
 	return value;
+}
+
+void PointcloudRenderer::align_pointclouds(int source_index, int target_index)
+{
+
 }
 
 bool PointcloudRenderer::is_initialized()
@@ -132,33 +138,24 @@ bool PointcloudRenderer::init_renderpipeline()
 	Logger::log("Creating render pipeline...");
 	wgpu::RenderPipelineDescriptor renderpipeline_desc{};
 
-	std::vector<wgpu::VertexAttribute> vertex_attribs(4);
+	std::vector<wgpu::VertexAttribute> vertex_attribs(2);
 
 	// position attribute
 	vertex_attribs[0].shaderLocation = 0;
 	vertex_attribs[0].format = wgpu::VertexFormat::Float32x3;
 	vertex_attribs[0].offset = 0;
 
-	// normal attribute
+	// color attribute
 	vertex_attribs[1].shaderLocation = 1;
 	vertex_attribs[1].format = wgpu::VertexFormat::Float32x3;
-	vertex_attribs[1].offset = offsetof(VertexAttributes, normal);
+	vertex_attribs[1].offset = offsetof(PointAttributes, color);
 
-	// color attribute
-	vertex_attribs[2].shaderLocation = 2;
-	vertex_attribs[2].format = wgpu::VertexFormat::Float32x3;
-	vertex_attribs[2].offset = offsetof(VertexAttributes, color);
-
-	// uv attribute
-	vertex_attribs[3].shaderLocation = 3;
-	vertex_attribs[3].format = wgpu::VertexFormat::Float32x2;
-	vertex_attribs[3].offset = offsetof(VertexAttributes, uv);
 
 	wgpu::VertexBufferLayout vertexbuffer_layout;
-	vertexbuffer_layout.attributeCount = (uint32_t)vertex_attribs.size();
+	vertexbuffer_layout.attributeCount = vertex_attribs.size();
 	vertexbuffer_layout.attributes = vertex_attribs.data();
-	vertexbuffer_layout.arrayStride = sizeof(VertexAttributes);
-	vertexbuffer_layout.stepMode = wgpu::VertexStepMode::Vertex;
+	vertexbuffer_layout.arrayStride = sizeof(PointAttributes);
+	vertexbuffer_layout.stepMode = wgpu::VertexStepMode::Instance;
 
 
 	renderpipeline_desc.vertex.bufferCount = 1;
@@ -170,8 +167,7 @@ bool PointcloudRenderer::init_renderpipeline()
 	renderpipeline_desc.vertex.constants = nullptr;
 
 
-	// renderPipelineDesc.primitive.topology = wgpu::PrimitiveTopology::TriangleList;
-	renderpipeline_desc.primitive.topology = wgpu::PrimitiveTopology::PointList;
+	renderpipeline_desc.primitive.topology = wgpu::PrimitiveTopology::TriangleList;
 	renderpipeline_desc.primitive.stripIndexFormat = wgpu::IndexFormat::Undefined;
 	renderpipeline_desc.primitive.frontFace = wgpu::FrontFace::CCW;
 	renderpipeline_desc.primitive.cullMode = wgpu::CullMode::None;
@@ -217,7 +213,6 @@ bool PointcloudRenderer::init_renderpipeline()
 
 	// binding layout
 	wgpu::BindGroupLayoutEntry bindgroup_layout_entries[] = {wgpu::Default, wgpu::Default};
-	//wgpu::BindGroupLayoutEntry bindgroup_layout_entry = wgpu::Default;
 	bindgroup_layout_entries[0].binding = 0;
 	bindgroup_layout_entries[0].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
 	bindgroup_layout_entries[0].buffer.type = wgpu::BufferBindingType::Uniform;
@@ -282,7 +277,8 @@ bool PointcloudRenderer::init_uniforms()
 	}
 
 	// initial uniform values
-	m_renderuniforms.modelMatrix = glm::scale(glm::mat4(1.0), glm::vec3(1.0));
+	m_renderuniforms.model_mat = glm::scale(glm::mat4(1.0), glm::vec3(1.0));
+	m_renderuniforms.point_size = 50.f;
 	m_queue.writeBuffer(m_renderuniform_buffer, 0, &m_renderuniforms, sizeof(Uniforms::RenderUniforms));
 
 	update_viewmatrix();
@@ -390,15 +386,15 @@ void PointcloudRenderer::terminate_rendertarget()
 void PointcloudRenderer::update_projectionmatrix()
 {
 	float ratio = m_width / m_height;
-	m_renderuniforms.projectionMatrix = glm::perspective((float)(45 * M_PI / 180), ratio, POINTCLOUD_CAMERA_PLANE_NEAR, POINTCLOUD_CAMERA_PLANE_FAR);
-	m_queue.writeBuffer(m_renderuniform_buffer, offsetof(Uniforms::RenderUniforms, projectionMatrix), &m_renderuniforms.projectionMatrix, sizeof(Uniforms::RenderUniforms::projectionMatrix));
+	m_renderuniforms.projection_mat = glm::perspective((float)(45 * M_PI / 180), ratio, POINTCLOUD_CAMERA_PLANE_NEAR, POINTCLOUD_CAMERA_PLANE_FAR);
+	m_queue.writeBuffer(m_renderuniform_buffer, offsetof(Uniforms::RenderUniforms, projection_mat), &m_renderuniforms.projection_mat, sizeof(Uniforms::RenderUniforms::projection_mat));
 }
 
 void PointcloudRenderer::update_viewmatrix()
 {
 	glm::vec3 position = m_camerastate.get_camera_position();
-	m_renderuniforms.viewMatrix = glm::lookAt(position, glm::vec3(0.f), glm::vec3(0, 0, 1));
-	m_queue.writeBuffer(m_renderuniform_buffer, offsetof(Uniforms::RenderUniforms, viewMatrix), &m_renderuniforms.viewMatrix, sizeof(Uniforms::RenderUniforms::viewMatrix));
+	m_renderuniforms.view_mat = glm::lookAt(position, glm::vec3(0.f), glm::vec3(0, 0, 1));
+	m_queue.writeBuffer(m_renderuniform_buffer, offsetof(Uniforms::RenderUniforms, view_mat), &m_renderuniforms.view_mat, sizeof(Uniforms::RenderUniforms::view_mat));
 }
 
 void PointcloudRenderer::handle_pointcloud_mouse_events()
@@ -502,9 +498,9 @@ void PointcloudRenderer::on_frame()
 		m_queue.writeBuffer(m_transform_buffer, ubo_offset, &leveled_model, sizeof(glm::mat4));
 
 		passEncoder.setPipeline(m_renderpipeline);
-		passEncoder.setVertexBuffer(0, pc->vertexbuffer(), 0, pc->vertexbuffer().getSize());
+		passEncoder.setVertexBuffer(0, pc->pointbuffer(), 0, pc->pointbuffer().getSize());
 		passEncoder.setBindGroup(0, m_bindgroup, 1, &ubo_offset);
-		passEncoder.draw(pc->vertexcount(), 1, 0, 0);
+		passEncoder.draw(6, pc->pointcount(), 0, 0);
 
 		i++;
 	}

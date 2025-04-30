@@ -5,6 +5,7 @@ project(
     LANGUAGES CXX C # programming languages used by the project
 )
 
+
 # Include glfw directory
 add_subdirectory(libs/glfw)
 # Include webgpu directory, to define the 'webgpu' target
@@ -77,6 +78,12 @@ add_custom_command(TARGET App POST_BUILD
     "$<TARGET_FILE_DIR:App>"
 )
 
+# PCL
+#find_package(PCL REQUIRED)
+#target_include_directories(App PRIVATE "C:/Program Files/PCL 1.15.0/include")
+#target_link_directories(App PRIVATE "C:/Program Files/PCL 1.15.0/lib")
+
+#message(STATUS "PCL Libraries: " ${PCL_LIBRARIES})
 
 
 # add libraries as dependency to App

@@ -34,9 +34,9 @@ Pointcloud::Pointcloud(wgpu::Device device, wgpu::Queue queue, k4a::image depth_
 
 Pointcloud::~Pointcloud()
 {
-	m_vertexbuffer.destroy();
-	m_vertexbuffer.release();
-	m_vertexcount = 0;
+	m_pointbuffer.destroy();
+	m_pointbuffer.release();
+	m_pointcount = 0;
 }
 
 void Pointcloud::capture_point_cloud()
@@ -143,11 +143,6 @@ void Pointcloud::write_point_cloud_to_buffer(const k4a::image point_cloud, int p
 		// z
 		vertexData.push_back((float)-point_cloud_data[i].xyz.y);
 
-		// normals (keep 0 for now)
-		vertexData.push_back(0);
-		vertexData.push_back(0);
-		vertexData.push_back(0);
-
 		// r
 		vertexData.push_back(1.f);
 		// g
@@ -155,24 +150,21 @@ void Pointcloud::write_point_cloud_to_buffer(const k4a::image point_cloud, int p
 		// b
 		vertexData.push_back(0.f);
 
-		// uv (keep 0 for now)
-		vertexData.push_back(0);
-		vertexData.push_back(0);
 	}
 
-	m_vertexcount = static_cast<int>(vertexData.size() / (sizeof(VertexAttributes) / sizeof(float)));
+	m_pointcount = static_cast<int>(vertexData.size() / (sizeof(PointAttributes) / sizeof(float)));
 
 	wgpu::BufferDescriptor bufferDesc{};
-	bufferDesc.size = m_vertexcount * sizeof(VertexAttributes);
+	bufferDesc.size = m_pointcount * sizeof(PointAttributes);
 	bufferDesc.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Vertex;
 	bufferDesc.mappedAtCreation = false;
 
-	m_vertexbuffer = m_device.createBuffer(bufferDesc);
-	if (!m_vertexbuffer) {
-		Logger::log("Could not create vertex buffer!", LoggingSeverity::Error);
+	m_pointbuffer = m_device.createBuffer(bufferDesc);
+	if (!m_pointbuffer) {
+		Logger::log("Could not create point buffer!", LoggingSeverity::Error);
 	}
-	m_queue.writeBuffer(m_vertexbuffer, 0, vertexData.data(), bufferDesc.size);
+	m_queue.writeBuffer(m_pointbuffer, 0, vertexData.data(), bufferDesc.size);
 
-	Logger::log(std::format("Vertex buffer: {}", (void*)m_vertexbuffer));
-	Logger::log(std::format("Vertex count: {}", m_vertexcount));
+	Logger::log(std::format("Point buffer: {}", (void*)m_pointbuffer));
+	Logger::log(std::format("Point count: {}", m_pointcount));
 }

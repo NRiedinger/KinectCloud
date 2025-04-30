@@ -10,12 +10,12 @@ public:
 	Pointcloud(wgpu::Device device, wgpu::Queue queue, k4a::image depth_image, k4a::calibration calibration, glm::mat4* transform, glm::quat cam_orientation);
 	~Pointcloud();
 
-	inline wgpu::Buffer vertexbuffer() {
-		return m_vertexbuffer;
+	inline wgpu::Buffer pointbuffer() {
+		return m_pointbuffer;
 	}
 
-	inline int vertexcount() {
-		return m_vertexcount;
+	inline int pointcount() {
+		return m_pointcount;
 	}
 
 	inline glm::mat4* transform() {
@@ -49,7 +49,7 @@ private:
 	float m_furthest_point = 1.f;
 
 	// points
-	wgpu::Buffer m_vertexbuffer = nullptr;
-	int m_vertexcount = 0;
+	wgpu::Buffer m_pointbuffer = nullptr;
+	int m_pointcount = 0;
 };
 
