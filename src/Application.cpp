@@ -2,7 +2,7 @@
 #include <format>
 #include <thread>
 
-#include <imgui.h>
+#include "utils/k4aimguiextensions.h"
 #include <backends/imgui_impl_wgpu.h>
 #include <backends/imgui_impl_glfw.h>
 
@@ -30,13 +30,15 @@ bool Application::on_init()
 	if (!init_gui())
 		return false;
 
-	m_camera_active = m_camera.on_init(m_device, m_queue, m_window_width - GUI_MENU_WIDTH, m_window_height - GUI_CONSOLE_HEIGHT);
+	// m_camera_active = m_camera.on_init(m_device, m_queue, m_window_width - GUI_MENU_WIDTH, m_window_height - GUI_CONSOLE_HEIGHT);
 
 	if (!m_capture_sequence.on_init(m_camera.color_texture_ptr(), m_camera.depth_image(), m_camera.calibration(), m_camera.device()))
 		return false;
 	
 	if(!m_renderer.on_init(m_device, m_queue, m_window_width - GUI_MENU_WIDTH, m_window_height - GUI_CONSOLE_HEIGHT))
 		return false;
+
+	m_k4a_device_selector.refresh_devices();
 
 	return true;
 }
@@ -384,13 +386,11 @@ void Application::render()
 	render_debug();
 }
 
+
+
 void Application::render_capture_menu()
 {
 	ImGui::Text("Camera Captures");
-	ImGui::SameLine();
-	if (ImGui::Button("Calibrate")) {
-		m_camera.calibrate_sensors();
-	}
 
 	ImGui::Separator();
 
@@ -401,49 +401,57 @@ void Application::render_capture_menu()
 	Pointcloud* to_remove = nullptr;
 	for (auto& capture : m_capture_sequence.captures()) {
 		ImGui::PushID(i);
-		ImGui::Text(std::format("Capture \"{}\"", capture->name).c_str());
 
-		static bool is_checked = false;
-		ImGui::Checkbox("Select", &is_checked);
-		if (is_checked) {
-			if (!capture->is_selected) {
-				if (m_renderer.get_num_pointclouds() < POINTCLOUD_MAX_NUM) {
-					capture->data_pointer = m_renderer.add_pointcloud(new Pointcloud(m_device, m_queue, capture->depth_image, capture->calibration, &capture->transform, m_camera.orientation()));
-					capture->is_selected = true;
-				}
-				else {
-					Logger::log(std::format("Maximum number of pointclouds reached ({})", POINTCLOUD_MAX_NUM), LoggingSeverity::Error);
+		if (ImGui::TreeNodeEx(std::format("Capture \"{}\"", capture->name).c_str(), ImGuiTreeNodeFlags_SpanAvailWidth)) {
+			ImGui::Separator();
+			static bool is_checked = false;
+			ImGui::Checkbox("Select", &is_checked);
+			if (is_checked) {
+				if (!capture->is_selected) {
+					if (m_renderer.get_num_pointclouds() < POINTCLOUD_MAX_NUM) {
+						capture->data_pointer = m_renderer.add_pointcloud(new Pointcloud(m_device, m_queue, capture->depth_image, capture->calibration, &capture->transform, m_camera.orientation()));
+						capture->is_selected = true;
+					}
+					else {
+						Logger::log(std::format("Maximum number of pointclouds reached ({})", POINTCLOUD_MAX_NUM), LoggingSeverity::Error);
+					}
 				}
 			}
-		}
-		else {
-			if (capture->is_selected) {
-				to_remove = capture->data_pointer;
-				capture->is_selected = false;
+			else {
+				if (capture->is_selected) {
+					to_remove = capture->data_pointer;
+					capture->is_selected = false;
+				}
 			}
+			
+
+			
+
+			if (m_app_state == AppState::Edit && capture->is_selected) {
+
+				glm::vec3 scale, translation, skew;
+				glm::vec4 perspective;
+				glm::quat rotation_rad;
+				glm::decompose(capture->transform, scale, rotation_rad, translation, skew, perspective);
+
+				glm::vec3 rotation_deg = Util::quat_to_euler_degrees(rotation_rad);
+
+				ImGui::SliderFloat3("Position", &translation.x, -500.f, 500.f);
+				ImGui::SliderFloat3("Rotation", &rotation_deg.x, -180.f, 180.f);
+				ImGui::SliderFloat("Scale", &scale.x, .1f, 5.f);
+
+				glm::mat4 new_transform = glm::translate(glm::mat4(1.f), translation) *
+					glm::toMat4(Util::euler_degrees_to_quat(rotation_deg)) *
+					glm::scale(glm::mat4(1.f), glm::vec3(scale.x));
+
+				capture->transform = new_transform;
+			}
+
+			ImGui::TreePop();
 		}
+		
 
 		ImGui::Separator();
-
-		if (m_app_state == AppState::Edit && capture->is_selected) {
-
-			glm::vec3 scale, translation, skew;
-			glm::vec4 perspective;
-			glm::quat rotation_rad;
-			glm::decompose(capture->transform, scale, rotation_rad, translation, skew, perspective);
-
-			glm::vec3 rotation_deg = Util::quat_to_euler_degrees(rotation_rad);
-
-			ImGui::SliderFloat3("Position", &translation.x, -500.f, 500.f);
-			ImGui::SliderFloat3("Rotation", &rotation_deg.x, -180.f, 180.f);
-			ImGui::SliderFloat("Scale", &scale.x, .1f, 5.f);
-
-			glm::mat4 new_transform = glm::translate(glm::mat4(1.f), translation) *
-				glm::toMat4(Util::euler_degrees_to_quat(rotation_deg)) *
-				glm::scale(glm::mat4(1.f), glm::vec3(scale.x));
-
-			capture->transform = new_transform;
-		}
 
 		ImGui::PopID();
 		i++;
@@ -463,7 +471,7 @@ void Application::render_capture_menu()
 
 	ImGui::Separator();
 
-	if (m_app_state == AppState::Capture) {
+	if (m_app_state == AppState::Capture && m_camera.is_initialized()) {
 		if (ImGui::Button("Capture [space]") || ImGui::IsKeyPressed(ImGuiKey_Space)) {
 			capture();
 		}
@@ -479,6 +487,10 @@ void Application::render_capture_menu()
 			m_capture_sequence.captures().clear();
 
 			m_renderer.clear_pointclouds();
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Calibrate")) {
+			m_camera.calibrate_sensors();
 		}
 	}
 	
@@ -553,6 +565,41 @@ void Application::render_menu()
 	ImGui::SetWindowPos({ 0.f, 0.f });
 	ImGui::SetWindowSize({ GUI_MENU_WIDTH, (float)m_window_height - GUI_CONSOLE_HEIGHT });
 
+
+	// draw k4a device selection
+	if (!m_camera.is_initialized()) {
+		ImGuiExtensions::K4AComboBox("Device", "no available devices", ImGuiComboFlags_None, m_k4a_device_selector.connected_devices(), m_k4a_device_selector.selected_device());
+		if (ImGui::Button("Refresh devices")) {
+			m_k4a_device_selector.refresh_devices();
+		}
+		ImGui::SameLine();
+		const bool can_open = !m_k4a_device_selector.connected_devices().empty();
+		{
+			ImGuiExtensions::ButtonColorChanger button_color_changer(ImGuiExtensions::ButtonColor::Green, can_open);
+			if (ImGuiExtensions::K4AButton("Open device", can_open)) {
+				m_camera.on_init(m_device, m_queue, *m_k4a_device_selector.selected_device(), m_window_width - GUI_MENU_WIDTH, m_window_height - GUI_CONSOLE_HEIGHT);
+				if(m_camera.is_initialized())
+					m_app_state = AppState::Capture;
+			}
+		}
+	}
+	else {
+		ImGui::Text(std::format("Device: {}", m_camera.serial_number()).c_str());
+		ImGui::SameLine();
+		{
+			ImGuiExtensions::ButtonColorChanger button_color_changer(ImGuiExtensions::ButtonColor::Red);
+			if (ImGui::Button("Close device")) {
+				m_camera.on_terminate();
+				m_k4a_device_selector.refresh_devices();
+			}
+		}
+	}
+
+	ImGui::Separator();
+	ImGui::NewLine();
+	
+
+	// draw app state buttons
 	auto app_state = m_app_state;
 	auto available_width = ImGui::GetContentRegionAvail();
 	ImVec4 active_button_color(ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered));
@@ -562,14 +609,14 @@ void Application::render_menu()
 		ImGui::PushStyleColor(ImGuiCol_Button, active_button_color);
 
 	// disable button if no camera is connected / init unsuccessful
-	if (!m_camera_active)
+	if (!m_camera.is_initialized())
 		ImGui::BeginDisabled();
 
 	if (ImGui::Button("Capture", ImVec2(available_width.x / 2, 40))) {
 		m_app_state = AppState::Capture;
 	}
 
-	if (!m_camera_active)
+	if (!m_camera.is_initialized())
 		ImGui::EndDisabled();
 
 	if (app_state == AppState::Capture)
@@ -591,7 +638,9 @@ void Application::render_menu()
 
 	ImGui::PopStyleVar();
 
-	ImGui::SetCursorPosY(50);
+
+	ImGui::Separator();
+	ImGui::NewLine();
 
 	render_capture_menu();
 

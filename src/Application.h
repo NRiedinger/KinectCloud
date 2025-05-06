@@ -9,6 +9,7 @@
 #include "Camera.h"
 #include "PointcloudRenderer.h"
 #include "CameraCaptureSequence.h"
+#include "K4ADeviceSelector.h"
 
 
 #pragma once
@@ -60,7 +61,7 @@ private:
 	GLFWwindow* m_window = nullptr;
 
 	Camera m_camera;
-	bool m_camera_active;
+	K4ADeviceSelector m_k4a_device_selector;
 	
 
 	wgpu::Device m_device = nullptr;

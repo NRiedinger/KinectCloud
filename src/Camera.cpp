@@ -23,7 +23,7 @@ Camera::~Camera()
 	on_terminate();
 }
 
-bool Camera::on_init(wgpu::Device device, wgpu::Queue queue, int width, int height)
+bool Camera::on_init(wgpu::Device device, wgpu::Queue queue, int k4a_device_idx, int width, int height)
 {
 	m_device = device;
 	m_queue = queue;
@@ -46,7 +46,9 @@ bool Camera::on_init(wgpu::Device device, wgpu::Queue queue, int width, int heig
 
 	Logger::log("Started opening k4a device...");
 
-	m_k4a_device = k4a::device::open(K4A_DEVICE_DEFAULT);
+	//m_k4a_device = k4a::device::open(K4A_DEVICE_DEFAULT);
+	m_k4a_device = k4a::device::open(k4a_device_idx);
+	//m_k4a_device = k4a_device.handle();
 	if (!m_k4a_device) {
 		Logger::log("Could not create k4a device!", LoggingSeverity::Error);
 		return false;
@@ -54,6 +56,7 @@ bool Camera::on_init(wgpu::Device device, wgpu::Queue queue, int width, int heig
 	Logger::log(std::format("Got k4a device: {}", (void*)&m_k4a_device));
 	m_k4a_device.start_cameras(&config);
 	m_k4a_device.start_imu();
+	m_k4a_serial_number = m_k4a_device.get_serialnum();
 
 	m_calibration = m_k4a_device.get_calibration(config.depth_mode, config.color_resolution);
 
@@ -135,6 +138,9 @@ bool Camera::on_init(wgpu::Device device, wgpu::Queue queue, int width, int heig
 
 void Camera::on_frame()
 {
+	if (!m_initialized)
+		return;
+	
 	k4a::capture capture;
 	if (m_k4a_device.get_capture(&capture, std::chrono::milliseconds(0))) {
 		const k4a::image color_image = capture.get_color_image();
@@ -145,6 +151,8 @@ void Camera::on_frame()
 		m_depth_image = transform.depth_image_to_color_camera(capture.get_depth_image());*/
 
 		m_color_texture.update(reinterpret_cast<const BgraPixel*>(color_image.get_buffer()));
+
+		capture.reset();
 	}
 
 	update_movement();

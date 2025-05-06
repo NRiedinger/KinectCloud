@@ -7,11 +7,18 @@
 
 class K4ADeviceSelector {
 public:
+	K4ADeviceSelector();
 	void render();
-
-private:
 	void refresh_devices();
 	k4a::device open_device();
+
+	inline int* selected_device() {
+		return &m_selected_device;
+	}
+
+	inline std::vector<std::pair<int, std::string>> connected_devices() {
+		return m_connected_devices;
+	}
 
 private:
 	int m_selected_device = -1;

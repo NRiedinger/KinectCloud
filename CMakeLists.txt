@@ -57,6 +57,9 @@ set(SOURCES
 	src/utils/glfw3webgpu.c
 	src/utils/glfw3webgpu.h
 	src/utils/stb_image_write.h
+	
+	src/utils/k4aimguiextensions.h
+	src/utils/k4aimguiextensions.cpp
 )
 add_executable(App ${SOURCES})
 

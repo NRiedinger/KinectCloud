@@ -9,7 +9,7 @@ class Camera
 public:
 	Camera();
 	~Camera();
-	bool on_init(wgpu::Device device, wgpu::Queue queue, int width, int height);
+	bool on_init(wgpu::Device device, wgpu::Queue queue, int k4a_device_idx, int width, int height);
 	void on_frame();
 	void on_terminate();
 	bool is_initialized();
@@ -33,6 +33,10 @@ public:
 		return m_orientation;
 	}
 
+	inline std::string serial_number() {
+		return m_k4a_serial_number;
+	}
+
 private:
 	bool m_initialized = false;
 	int m_width;
@@ -40,6 +44,7 @@ private:
 
 
 	k4a::device m_k4a_device = NULL;
+	std::string m_k4a_serial_number;
 
 	wgpu::Device m_device = NULL;
 	wgpu::Queue m_queue = NULL;
