@@ -38,9 +38,11 @@ private:
 	int m_width;
 	int m_height;
 
+
+	k4a::device m_k4a_device = NULL;
+
 	wgpu::Device m_device = NULL;
 	wgpu::Queue m_queue = NULL;
-	k4a::device m_k4a_device = NULL;
 	wgpu::Buffer m_pixelbuffer = NULL;
 	wgpu::Buffer m_depthbuffer = NULL;
 	Texture m_color_texture;

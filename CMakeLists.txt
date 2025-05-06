@@ -42,6 +42,9 @@ set(SOURCES
 	src/Pointcloud.h
 	src/Pointcloud.cpp
 	
+	src/K4ADeviceSelector.cpp
+	src/K4ADeviceSelector.h
+	
 	src/Darkmode.h
 	src/Darkmode.cpp
 	

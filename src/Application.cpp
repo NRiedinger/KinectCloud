@@ -30,8 +30,7 @@ bool Application::on_init()
 	if (!init_gui())
 		return false;
 
-	if (!m_camera.on_init(m_device, m_queue, m_window_width - GUI_MENU_WIDTH, m_window_height - GUI_CONSOLE_HEIGHT))
-		return false;
+	m_camera_active = m_camera.on_init(m_device, m_queue, m_window_width - GUI_MENU_WIDTH, m_window_height - GUI_CONSOLE_HEIGHT);
 
 	if (!m_capture_sequence.on_init(m_camera.color_texture_ptr(), m_camera.depth_image(), m_camera.calibration(), m_camera.device()))
 		return false;
@@ -558,17 +557,27 @@ void Application::render_menu()
 	auto available_width = ImGui::GetContentRegionAvail();
 	ImVec4 active_button_color(ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered));
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+
 	if (app_state == AppState::Capture)
 		ImGui::PushStyleColor(ImGuiCol_Button, active_button_color);
+
+	// disable button if no camera is connected / init unsuccessful
+	if (!m_camera_active)
+		ImGui::BeginDisabled();
 
 	if (ImGui::Button("Capture", ImVec2(available_width.x / 2, 40))) {
 		m_app_state = AppState::Capture;
 	}
 
+	if (!m_camera_active)
+		ImGui::EndDisabled();
+
 	if (app_state == AppState::Capture)
 		ImGui::PopStyleColor();
 
+
 	ImGui::SameLine();
+
 
 	if (app_state == AppState::Edit)
 		ImGui::PushStyleColor(ImGuiCol_Button, active_button_color);

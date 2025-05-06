@@ -52,12 +52,16 @@ private:
 	int m_window_height = DEFAULT_WINDOW_H;
 	bool m_is_minimized = false;
 
-	AppState m_app_state = AppState::Capture;
-	Camera m_camera;
+	AppState m_app_state = AppState::Default;
+
 	PointcloudRenderer m_renderer;
 	CameraCaptureSequence m_capture_sequence;
 
 	GLFWwindow* m_window = nullptr;
+
+	Camera m_camera;
+	bool m_camera_active;
+	
 
 	wgpu::Device m_device = nullptr;
 	wgpu::Surface m_surface = nullptr;

@@ -16,7 +16,6 @@
 
 Camera::Camera()
 {
-
 }
 
 Camera::~Camera()
@@ -35,7 +34,7 @@ bool Camera::on_init(wgpu::Device device, wgpu::Queue queue, int width, int heig
 	if (device_count < 1)
 	{
 		Logger::log("No Azure Kinect devices detected!", LoggingSeverity::Error);
-		throw std::runtime_error("No Azure Kinect devices detected!");
+		return false;
 	}
 
 	k4a_device_configuration_t config = K4A_DEVICE_CONFIG_INIT_DISABLE_ALL;
@@ -280,6 +279,7 @@ void Camera::calibrate_sensors()
 	Logger::log(std::format("m_acc_noise: {}", Util::vec3_to_string(m_acc_noise)));
 	Logger::log(std::format("m_gyro_noise: {}", Util::vec3_to_string(m_gyro_noise)));
 }
+
 
 Texture* Camera::color_texture_ptr()
 {
