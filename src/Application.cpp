@@ -404,10 +404,8 @@ void Application::render_capture_menu()
 
 		if (ImGui::TreeNodeEx(std::format("Capture \"{}\"", capture->name).c_str(), ImGuiTreeNodeFlags_SpanAvailWidth)) {
 			ImGui::Separator();
-			static bool is_checked = false;
-			ImGui::Checkbox("Select", &is_checked);
-			if (is_checked) {
-				if (!capture->is_selected) {
+			if (ImGui::Checkbox("Select", &capture->is_selected)) {
+				if (capture->is_selected) {
 					if (m_renderer.get_num_pointclouds() < POINTCLOUD_MAX_NUM) {
 						capture->data_pointer = m_renderer.add_pointcloud(new Pointcloud(m_device, m_queue, capture->depth_image, capture->calibration, &capture->transform, m_camera.orientation()));
 						capture->is_selected = true;
@@ -416,16 +414,11 @@ void Application::render_capture_menu()
 						Logger::log(std::format("Maximum number of pointclouds reached ({})", POINTCLOUD_MAX_NUM), LoggingSeverity::Error);
 					}
 				}
-			}
-			else {
-				if (capture->is_selected) {
+				else {
 					to_remove = capture->data_pointer;
 					capture->is_selected = false;
 				}
 			}
-			
-
-			
 
 			if (m_app_state == AppState::Edit && capture->is_selected) {
 
