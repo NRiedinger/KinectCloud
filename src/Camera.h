@@ -16,6 +16,7 @@ public:
 	void on_resize(int width, int height);
 	void update_movement();
 	void calibrate_sensors();
+	void draw_gizmos();
 
 	Texture* color_texture_ptr();
 	k4a::image* depth_image();

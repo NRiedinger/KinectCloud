@@ -59,6 +59,7 @@ private:
 		};
 
 		auto drawlist = ImGui::GetWindowDrawList();
+
 		drawlist->AddLine(project({ 0.f, 0.f, 0.f }), project({ 10.f, 0.f, 0.f }), IM_COL32(255, 0, 0, 255));
 		drawlist->AddLine(project({ 0.f, 0.f, 0.f }), project({ 0.f, 10.f, 0.f }), IM_COL32(0, 255, 0, 255));
 		drawlist->AddLine(project({ 0.f, 0.f, 0.f }), project({ 0.f, 0.f, 10.f }), IM_COL32(0, 0, 255, 255));

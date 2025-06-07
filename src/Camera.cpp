@@ -14,6 +14,10 @@
 #include <format>
 #include <thread>
 
+
+#define _USE_MATH_DEFINES
+#include <math.h>
+
 Camera::Camera()
 {
 }
@@ -176,6 +180,8 @@ void Camera::on_frame()
 	ImGui::SetCursorPos({ (viewport_dims.x - image_dims.x) * .5f + 7, (viewport_dims.y - image_dims.y) * .5f + 7 });
 	ImGui::Image((ImTextureID)(intptr_t)m_color_texture.view(), image_dims);
 
+	draw_gizmos();
+
 	ImGui::End();
 }
 
@@ -286,6 +292,36 @@ void Camera::calibrate_sensors()
 	Logger::log("Camera calibrated.");
 	Logger::log(std::format("m_acc_noise: {}", Util::vec3_to_string(m_acc_noise)));
 	Logger::log(std::format("m_gyro_noise: {}", Util::vec3_to_string(m_gyro_noise)));
+}
+
+void Camera::draw_gizmos()
+{
+	glm::mat4 projection_mat = glm::perspective((float)(45 * M_PI / 180), (float)(m_width / m_height), POINTCLOUD_CAMERA_PLANE_NEAR, POINTCLOUD_CAMERA_PLANE_FAR);
+	glm::mat4 view_mat = glm::lookAt(glm::vec3(10.f), glm::vec3(0.f), glm::vec3(0, 0, 1));
+
+	static auto project = [&](glm::vec3 p) -> ImVec2 {
+
+		auto screen_pos = Util::project_point(projection_mat, view_mat, p, (float)m_width, (float)m_height);
+
+		return { GUI_MENU_WIDTH + screen_pos.x, screen_pos.y };
+	};
+
+	glm::vec3 scale, translation, skew;
+	glm::vec4 perspective;
+	glm::quat rotation;
+	glm::decompose(m_delta_transform, scale, rotation, translation, skew, perspective);
+
+
+	auto q = glm::conjugate(rotation);
+	glm::vec3 vo = glm::rotate(q, { 0.f, 0.f, 0.f });
+	glm::vec3 vx = glm::rotate(q, { 1.f, 0.f, 0.f });
+	glm::vec3 vy = glm::rotate(q, { 0.f, 1.f, 0.f });
+	glm::vec3 vz = glm::rotate(q, { 0.f, 0.f, 1.f });
+
+	auto drawlist = ImGui::GetWindowDrawList();
+	drawlist->AddLine(project(vo), project(vx), IM_COL32(255, 0, 0, 255));
+	drawlist->AddLine(project(vo), project(vy), IM_COL32(0, 255, 0, 255));
+	drawlist->AddLine(project(vo), project(vz), IM_COL32(0, 0, 255, 255));
 }
 
 

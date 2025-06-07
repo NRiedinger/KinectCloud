@@ -10,6 +10,7 @@
 #include <glm/glm.hpp>
 #include <glm/ext.hpp>
 
+
 #pragma once
 
 enum class LoggingSeverity {
@@ -65,7 +66,11 @@ public:
 	}
 
 	inline static glm::vec2 project_point(glm::mat4 projection_mat, glm::mat4 view_mat, glm::vec3 p, float width, float height) {
+		
 		glm::vec4 clip = projection_mat * view_mat * glm::vec4(p, 1.f);
+		/*if (clip.w < 0.f)
+			return glm::vec2(-FLT_MAX, -FLT_MAX);*/
+
 		glm::vec3 ndc = glm::vec3(clip) / clip.w;
 
 		float sx = (ndc.x * .5f + .5f) * width;

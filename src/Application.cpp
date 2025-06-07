@@ -500,7 +500,7 @@ void Application::render_debug()
 	ImGui::Text("Number of captures: %d", m_capture_sequence.captures().size());
 	ImGui::Text("Number of pointclouds: %d", m_renderer.get_num_pointclouds());
 	ImGui::Text("Number of points: %d", m_renderer.get_num_vertices());
-	ImGui::TextUnformatted(std::format("Delta transform: \n{}", Util::mat4_to_string(m_camera.delta_transform())).c_str());
+	//ImGui::TextUnformatted(std::format("Delta transform: \n{}", Util::mat4_to_string(m_camera.delta_transform())).c_str());
 	
 	glm::vec3 scale, translation, skew;
 	glm::vec4 perspective;
