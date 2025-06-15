@@ -1,3 +1,5 @@
+#include <filesystem>
+
 #include <webgpu/webgpu.hpp>
 #include <k4a/k4a.hpp>
 
@@ -8,14 +10,15 @@
 class Pointcloud {
 public:
 	Pointcloud(wgpu::Device device, wgpu::Queue queue, k4a::image depth_image, k4a::calibration calibration, glm::mat4* transform, glm::quat cam_orientation);
+	Pointcloud(wgpu::Device device, wgpu::Queue queue, glm::mat4* transform, glm::vec3 color, const std::filesystem::path& path);
 	~Pointcloud();
 
 	inline wgpu::Buffer pointbuffer() {
-		return m_pointbuffer;
+		return m_gpu_buffer;
 	}
 
 	inline int pointcount() {
-		return m_pointcount;
+		return m_points.size();
 	}
 
 	inline glm::mat4* transform() {
@@ -34,7 +37,7 @@ private:
 	void capture_point_cloud();
 	void create_xy_table(const k4a::calibration* calibration, k4a::image xy_table);
 	void generate_point_cloud(const k4a::image depth_image, const k4a::image xy_table, k4a::image point_cloud, int* point_count);
-	void write_point_cloud_to_buffer(const k4a::image point_cloud, int point_count);
+	void write_point_cloud_to_buffer(/*const k4a::image point_cloud, int point_count*/);
 
 private:
 	bool m_is_initialized = false;
@@ -44,12 +47,12 @@ private:
 	k4a::image m_depth_image;
 	k4a::image m_transformed_depth_image;
 	k4a::calibration m_calibration;
-	glm::mat4* m_transform;
-	glm::quat m_cam_orientation;
+	glm::mat4* m_transform = nullptr;
+	glm::quat m_cam_orientation = glm::quat();
 	float m_furthest_point = 1.f;
 
 	// points
-	wgpu::Buffer m_pointbuffer = nullptr;
-	int m_pointcount = 0;
+	std::vector<PointAttributes> m_points;
+	wgpu::Buffer m_gpu_buffer = nullptr;
 };
 

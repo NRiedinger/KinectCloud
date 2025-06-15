@@ -5,6 +5,8 @@ project(
     LANGUAGES CXX C # programming languages used by the project
 )
 
+include(C:/vcpkg/scripts/buildsystems/vcpkg.cmake)
+
 
 # Include glfw directory
 add_subdirectory(libs/glfw)
@@ -84,12 +86,9 @@ add_custom_command(TARGET App POST_BUILD
     "$<TARGET_FILE_DIR:App>"
 )
 
-# PCL
-#find_package(PCL REQUIRED)
-#target_include_directories(App PRIVATE "C:/Program Files/PCL 1.15.0/include")
-#target_link_directories(App PRIVATE "C:/Program Files/PCL 1.15.0/lib")
 
-#message(STATUS "PCL Libraries: " ${PCL_LIBRARIES})
+# PCL
+find_package(PCL REQUIRED COMPONENTS io common registration)
 
 
 # add libraries as dependency to App
@@ -98,6 +97,7 @@ set(LIBRARIES
 	glfw
 	imgui
 	k4a
+	${PCL_LIBRARIES}
 )
 target_link_libraries(App PRIVATE ${LIBRARIES})
 

@@ -8,6 +8,8 @@
 #include <glm/ext.hpp>
 #include <GLFW/glfw3.h>
 
+#include "utils/tinyply.h"
+
 #include <vector>
 #include <unordered_map>
 #include <string>
@@ -32,11 +34,63 @@ Pointcloud::Pointcloud(wgpu::Device device, wgpu::Queue queue, k4a::image depth_
 	capture_point_cloud();
 }
 
+Pointcloud::Pointcloud(wgpu::Device device, wgpu::Queue queue, glm::mat4* transform, glm::vec3 color, const std::filesystem::path& path)
+{
+	m_device = device;
+	m_queue = queue;
+	m_transform = transform;
+	
+	using namespace tinyply;
+
+	std::ifstream filestream(path, std::ios::binary);
+	if (!filestream.is_open()) {
+		throw std::exception("Failed to load PLY file.");
+	}
+
+	PlyFile file;
+	file.parse_header(filestream);
+
+	PlyElement vertex = file.get_elements().front();
+	if (vertex.name != "vertex") {
+		throw std::exception("First element must be 'vertex'");
+	}
+
+	std::shared_ptr<PlyData> points_ptr = file.request_properties_from_element("vertex", { "x", "y", "z" });
+
+	file.read(filestream);
+
+	std::vector<glm::vec3> points(points_ptr->count);
+	std::memcpy(points.data(), points_ptr->buffer.get(), points_ptr->buffer.size_bytes());
+
+	m_points.clear();
+	for (int i = 0; i < points.size(); i++) {
+
+		PointAttributes point;
+
+		point.position.x = (float)-points[i].x;
+		point.position.y = (float)points[i].z;
+		point.position.z = (float)-points[i].y;
+
+		point.color.r = color.r;
+		point.color.g = color.g;
+		point.color.b = color.b;
+
+		m_points.push_back(point);
+
+		auto len = glm::length(glm::vec3(point.position.x, point.position.y, point.position.z));
+		if (len > m_furthest_point) {
+			m_furthest_point = len;
+		}
+	}
+
+	write_point_cloud_to_buffer();
+}
+
 Pointcloud::~Pointcloud()
 {
-	m_pointbuffer.destroy();
-	m_pointbuffer.release();
-	m_pointcount = 0;
+	m_gpu_buffer.destroy();
+	m_gpu_buffer.release();
+	m_points.clear();
 }
 
 void Pointcloud::capture_point_cloud()
@@ -64,7 +118,7 @@ void Pointcloud::capture_point_cloud()
 
 	int point_count;
 	generate_point_cloud(m_depth_image, xy_table, point_cloud, &point_count);
-	write_point_cloud_to_buffer(point_cloud, point_count);
+	write_point_cloud_to_buffer(/*point_cloud, point_count*/);
 }
 
 void Pointcloud::create_xy_table(const k4a::calibration* calibration, k4a::image xy_table)
@@ -123,10 +177,27 @@ void Pointcloud::generate_point_cloud(const k4a::image depth_image, const k4a::i
 			point_cloud_data[i].xyz.z = nanf("");
 		}
 	}
+
+	m_points.clear();
+	for (int i = 0; i < width * height; i++) {
+
+		PointAttributes point;
+
+		point.position.x = (float)-point_cloud_data[i].xyz.x;
+		point.position.y = (float)point_cloud_data[i].xyz.z;
+		point.position.z = (float)-point_cloud_data[i].xyz.y;
+
+		point.color.r = 1.f;
+		point.color.g = 0.f;
+		point.color.b = 0.f;
+
+		m_points.push_back(point);
+	}
 }
 
-void Pointcloud::write_point_cloud_to_buffer(const k4a::image point_cloud, int point_count)
+void Pointcloud::write_point_cloud_to_buffer(/*const k4a::image point_cloud, int point_count*/)
 {
+	/*
 	const int width = point_cloud.get_width_pixels();
 	const int height = point_cloud.get_height_pixels();
 
@@ -153,18 +224,20 @@ void Pointcloud::write_point_cloud_to_buffer(const k4a::image point_cloud, int p
 	}
 
 	m_pointcount = static_cast<int>(vertexData.size() / (sizeof(PointAttributes) / sizeof(float)));
+	*/
+
 
 	wgpu::BufferDescriptor bufferDesc{};
-	bufferDesc.size = m_pointcount * sizeof(PointAttributes);
+	bufferDesc.size = m_points.size() * sizeof(PointAttributes);
 	bufferDesc.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Vertex;
 	bufferDesc.mappedAtCreation = false;
 
-	m_pointbuffer = m_device.createBuffer(bufferDesc);
-	if (!m_pointbuffer) {
+	m_gpu_buffer = m_device.createBuffer(bufferDesc);
+	if (!m_gpu_buffer) {
 		Logger::log("Could not create point buffer!", LoggingSeverity::Error);
 	}
-	m_queue.writeBuffer(m_pointbuffer, 0, vertexData.data(), bufferDesc.size);
+	m_queue.writeBuffer(m_gpu_buffer, 0, m_points.data(), bufferDesc.size);
 
-	Logger::log(std::format("Point buffer: {}", (void*)m_pointbuffer));
-	Logger::log(std::format("Point count: {}", m_pointcount));
+	Logger::log(std::format("Point buffer: {}", (void*)m_gpu_buffer));
+	Logger::log(std::format("Point count: {}", m_points.size()));
 }

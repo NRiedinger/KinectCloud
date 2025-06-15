@@ -1,6 +1,7 @@
 #include "Application.h"
 #include <format>
 #include <thread>
+#include <windows.h>
 
 #include "utils/k4aimguiextensions.h"
 #include <backends/imgui_impl_wgpu.h>
@@ -306,6 +307,25 @@ bool Application::init_gui()
 		return false;
 	}
 
+
+	// check for high DPI
+	if (GetDpiForSystem() > 96) {
+		constexpr float high_dpi_scale_factor = 2.0f;
+		constexpr float defaultFontSize = 13.0f;
+
+		ImGui::GetStyle().ScaleAllSizes(high_dpi_scale_factor);
+
+		ImFontConfig font_config;
+		font_config.SizePixels = defaultFontSize * high_dpi_scale_factor;
+		io.Fonts->AddFontDefault(&font_config);
+
+		int w, h;
+		glfwGetWindowSize(m_window, &w, &h);
+		w = static_cast<int>(w * high_dpi_scale_factor);
+		h = static_cast<int>(h * high_dpi_scale_factor);
+		glfwSetWindowSize(m_window, w, h);
+	}
+
 	
 	return true;
 }
@@ -391,6 +411,40 @@ void Application::render()
 void Application::render_capture_menu()
 {
 	ImGui::Text("Camera Captures");
+
+	ImGui::Separator();
+
+	if (ImGui::Button("Load Test-PLY")) {
+
+		{
+			CameraCapture* capture = new CameraCapture();
+
+			capture->name = "Test 1";
+			capture->is_selected = true;
+			capture->transform = glm::mat4(1.f) * glm::toMat4(glm::quat(glm::radians(glm::vec3(0.f, 0.f, 0.f))));
+			capture->camera_orientation = glm::quat();
+			m_capture_sequence.add_capture(capture);
+			CameraCaptureSequence::s_capturelist_updated = true;
+
+
+			m_renderer.add_pointcloud(new Pointcloud(m_device, m_queue, &capture->transform, { 0.f, 1.f, 0.f }, RESOURCE_DIR "/depth_point_cloud.ply"));
+		}
+
+		{
+			CameraCapture* capture = new CameraCapture();
+
+			capture->name = "Test 2";
+			capture->is_selected = true;
+			capture->transform = glm::mat4(1.f) * glm::toMat4(glm::quat(glm::radians(glm::vec3(0.f, 0.f, 30.f))));
+			capture->camera_orientation = glm::quat();
+			m_capture_sequence.add_capture(capture);
+			CameraCaptureSequence::s_capturelist_updated = true;
+
+
+			m_renderer.add_pointcloud(new Pointcloud(m_device, m_queue, &capture->transform, { 1.f, 0.f, 0.f }, RESOURCE_DIR "/depth_point_cloud.ply"));
+		}
+		
+	}
 
 	ImGui::Separator();
 
