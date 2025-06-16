@@ -14,6 +14,11 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 
+#include <pcl/point_types.h>
+#include <pcl/point_cloud.h>
+#include <pcl/registration/icp.h>
+#include <pcl/io/pcd_io.h>
+
 
 bool PointcloudRenderer::on_init(wgpu::Device device, wgpu::Queue queue, int width, int height)
 {
@@ -114,9 +119,81 @@ float PointcloudRenderer::get_futhest_point()
 	return value;
 }
 
-void PointcloudRenderer::align_pointclouds(int source_index, int target_index)
+void PointcloudRenderer::align_pointclouds()
 {
+	static auto vector_to_pointcloud = [](const std::vector<PointAttributes>& vec) {
+		auto cloud = std::make_shared<pcl::PointCloud<pcl::PointXYZRGB>>();
+		cloud->width = static_cast<uint32_t>(vec.size());
+		cloud->height = 1;
+		cloud->is_dense = false;
+		cloud->points.resize(vec.size());
 
+		for (size_t i = 0; i < vec.size(); i++) {
+			const auto& pt = vec[i];
+
+			pcl::PointXYZRGB p;
+
+			p.x = pt.position.x;
+			p.y = pt.position.y;
+			p.z = pt.position.z;
+
+			p.r = static_cast<uint8_t>(pt.color.r * 255.f);
+			p.g = static_cast<uint8_t>(pt.color.g * 255.f);
+			p.b = static_cast<uint8_t>(pt.color.b * 255.f);
+
+			cloud->points[i] = p;
+		}
+
+		return cloud;
+	};
+
+	static auto eigen_to_glm = [](const Eigen::Matrix4f& eigen_mat) {
+		glm::mat4 glm_mat;
+
+		for (int row = 0; row < 4; row++) {
+			for (int col = 0; col < 4; col++) {
+				glm_mat[col][row] = eigen_mat(row, col);
+			}
+		}
+
+		return glm_mat;
+	};
+
+	if (m_pointclouds.size() < 2) {
+		return;
+	}
+
+	auto target_cloud = vector_to_pointcloud(m_pointclouds[0]->points());
+
+	// TODO: loop through every pc and align to first
+
+	int i = 1;
+
+	auto source_cloud = vector_to_pointcloud(m_pointclouds[i]->points());
+
+
+	pcl::IterativeClosestPoint<pcl::PointXYZRGB, pcl::PointXYZRGB> icp;
+	icp.setMaximumIterations(50);
+	icp.setMaxCorrespondenceDistance(1.0);
+	icp.setTransformationEpsilon(1e-8);
+	icp.setEuclideanFitnessEpsilon(1);
+
+	icp.setInputSource(source_cloud);
+	icp.setInputTarget(target_cloud);
+
+	pcl::PointCloud<pcl::PointXYZRGB> aligned_cloud;
+	icp.align(aligned_cloud);
+
+	if (icp.hasConverged()) {
+		std::cout << "ICP konvergiert nach " << icp.getMaximumIterations() << " Iterationen" << std::endl;
+		std::cout << "Fitness Score: " << icp.getFitnessScore() << std::endl;
+
+		// Transformation ausgeben
+		auto transform = eigen_to_glm(icp.getFinalTransformation());
+		std::cout << "Transformationsmatrix:\n" << Util::mat4_to_string(transform) << std::endl;
+
+		m_pointclouds[i]->set_transform(transform);
+	}
 }
 
 bool PointcloudRenderer::is_initialized()
@@ -477,7 +554,7 @@ void PointcloudRenderer::on_frame()
 	int i = 0;
 	for (auto pc : m_pointclouds) {
 
-		glm::mat4 model = glm::scale(*pc->transform(), glm::vec3(100.f / get_futhest_point()));
+		glm::mat4 model = glm::scale(*pc->get_transform_ptr(), glm::vec3(100.f / get_futhest_point()));
 		glm::quat cam_orienation = pc->camera_orienation();
 
 		glm::vec3 world_up = glm::vec3(0.f, 0.f, 1.f);

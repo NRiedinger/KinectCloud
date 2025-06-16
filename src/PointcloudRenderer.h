@@ -8,6 +8,8 @@
 #include <imgui.h>
 
 
+
+
 #pragma once
 
 
@@ -27,7 +29,7 @@ public:
 	int get_num_vertices();
 	float get_futhest_point();
 
-	void align_pointclouds(int source_index, int target_index);
+	void align_pointclouds();
 
 private:
 	bool init_rendertarget();

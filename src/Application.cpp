@@ -421,13 +421,14 @@ void Application::render_capture_menu()
 
 			capture->name = "Test 1";
 			capture->is_selected = true;
-			capture->transform = glm::mat4(1.f) * glm::toMat4(glm::quat(glm::radians(glm::vec3(0.f, 0.f, 0.f))));
+			//capture->transform = glm::mat4(1.f) * glm::toMat4(glm::quat(glm::radians(glm::vec3(0.f, 0.f, 0.f))));
+			capture->transform = glm::mat4(1.f);
 			capture->camera_orientation = glm::quat();
 			m_capture_sequence.add_capture(capture);
 			CameraCaptureSequence::s_capturelist_updated = true;
 
 
-			m_renderer.add_pointcloud(new Pointcloud(m_device, m_queue, &capture->transform, { 0.f, 1.f, 0.f }, RESOURCE_DIR "/depth_point_cloud.ply"));
+			m_renderer.add_pointcloud(new Pointcloud(m_device, m_queue, &capture->transform, { 0.f, 1.f, 0.f }, RESOURCE_DIR "/depth_point_cloud.ply", glm::mat4(1.f)));
 		}
 
 		{
@@ -435,15 +436,21 @@ void Application::render_capture_menu()
 
 			capture->name = "Test 2";
 			capture->is_selected = true;
-			capture->transform = glm::mat4(1.f) * glm::toMat4(glm::quat(glm::radians(glm::vec3(0.f, 0.f, 30.f))));
+			//capture->transform = glm::translate(glm::mat4(1.f) * glm::toMat4(glm::quat(glm::radians(glm::vec3(0.f, 0.f, 0.f)))), glm::vec3(1.f, 0.f, 0.f));
+			capture->transform = glm::mat4(1.f);
 			capture->camera_orientation = glm::quat();
 			m_capture_sequence.add_capture(capture);
 			CameraCaptureSequence::s_capturelist_updated = true;
 
 
-			m_renderer.add_pointcloud(new Pointcloud(m_device, m_queue, &capture->transform, { 1.f, 0.f, 0.f }, RESOURCE_DIR "/depth_point_cloud.ply"));
+			glm::mat4 initial_transform = glm::translate(glm::mat4(1.f) * glm::toMat4(glm::quat(glm::radians(glm::vec3(0.f, 0.f, 0.f)))), glm::vec3(10.f, 0.f, 0.f));
+			m_renderer.add_pointcloud(new Pointcloud(m_device, m_queue, &capture->transform, { 1.f, 0.f, 0.f }, RESOURCE_DIR "/depth_point_cloud.ply", initial_transform));
 		}
 		
+	}
+
+	if (ImGui::Button("Align")) {
+		m_renderer.align_pointclouds();
 	}
 
 	ImGui::Separator();

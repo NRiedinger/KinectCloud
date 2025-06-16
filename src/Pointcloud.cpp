@@ -34,7 +34,7 @@ Pointcloud::Pointcloud(wgpu::Device device, wgpu::Queue queue, k4a::image depth_
 	capture_point_cloud();
 }
 
-Pointcloud::Pointcloud(wgpu::Device device, wgpu::Queue queue, glm::mat4* transform, glm::vec3 color, const std::filesystem::path& path)
+Pointcloud::Pointcloud(wgpu::Device device, wgpu::Queue queue, glm::mat4* transform, glm::vec3 color, const std::filesystem::path& path, glm::mat4 initial_transform)
 {
 	m_device = device;
 	m_queue = queue;
@@ -67,9 +67,20 @@ Pointcloud::Pointcloud(wgpu::Device device, wgpu::Queue queue, glm::mat4* transf
 
 		PointAttributes point;
 
-		point.position.x = (float)-points[i].x;
+		glm::vec4 transformed = initial_transform * glm::vec4(
+			-points[i].x,
+			points[i].z,
+			- points[i].y,
+			1.f
+		);
+
+		/*point.position.x = (float)-points[i].x;
 		point.position.y = (float)points[i].z;
-		point.position.z = (float)-points[i].y;
+		point.position.z = (float)-points[i].y;*/
+
+		point.position.x = transformed.x;
+		point.position.y = transformed.y;
+		point.position.z = transformed.z;
 
 		point.color.r = color.r;
 		point.color.g = color.g;

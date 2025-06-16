@@ -10,7 +10,7 @@
 class Pointcloud {
 public:
 	Pointcloud(wgpu::Device device, wgpu::Queue queue, k4a::image depth_image, k4a::calibration calibration, glm::mat4* transform, glm::quat cam_orientation);
-	Pointcloud(wgpu::Device device, wgpu::Queue queue, glm::mat4* transform, glm::vec3 color, const std::filesystem::path& path);
+	Pointcloud(wgpu::Device device, wgpu::Queue queue, glm::mat4* transform, glm::vec3 color, const std::filesystem::path& path, glm::mat4 initial_transform);
 	~Pointcloud();
 
 	inline wgpu::Buffer pointbuffer() {
@@ -21,8 +21,16 @@ public:
 		return m_points.size();
 	}
 
-	inline glm::mat4* transform() {
+	inline std::vector<PointAttributes> points() {
+		return m_points;
+	}
+
+	inline glm::mat4* get_transform_ptr() {
 		return m_transform;
+	}
+
+	inline void set_transform(glm::mat4 trans_mat) {
+		*m_transform = trans_mat;
 	}
 
 	inline glm::quat camera_orienation() {
