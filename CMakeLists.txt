@@ -90,7 +90,6 @@ add_custom_command(TARGET App POST_BUILD
 # PCL
 find_package(PCL REQUIRED COMPONENTS io common registration)
 
-
 # add libraries as dependency to App
 set(LIBRARIES
 	webgpu
@@ -106,9 +105,11 @@ option(DEV_MODE "set up development helper settings" ON)
 if(DEV_MODE)
 	target_compile_definitions(App PRIVATE RESOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/resources")
 	target_compile_definitions(App PRIVATE OUTPUT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/output")
+	target_compile_definitions(App PRIVATE TOOLS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tools")
 else()
 	target_compile_definitions(App PRIVATE RESOURCE_DIR="./resources")
 	target_compile_definitions(App PRIVATE OUTPUT_DIR="./output")
+	target_compile_definitions(App PRIVATE TOOLS_DIR="./tools")
 endif()
 
 

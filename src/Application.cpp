@@ -2,6 +2,7 @@
 #include <format>
 #include <thread>
 #include <windows.h>
+#include <cstdlib>
 
 #include "utils/k4aimguiextensions.h"
 #include <backends/imgui_impl_wgpu.h>
@@ -129,6 +130,26 @@ void Application::capture()
 	capture->camera_orientation = glm::quat(m_camera.orientation());
 	m_capture_sequence.add_capture(capture);
 	CameraCaptureSequence::s_capturelist_updated = true;
+}
+
+void Application::run_colmap()
+{
+	std::string colmap_bin_path = TOOLS_DIR "/colmap-x64-windows-nocuda/COLMAP.bat";
+	std::string db_path = OUTPUT_DIR "/database.db"; // TODO: delete database.db if it already exists (from previous reconstruction)
+	std::string image_path = OUTPUT_DIR "/images";
+	std::string sparse_path = OUTPUT_DIR "/sparse"; // TODO: create folder, if it doesn't exist
+
+	std::string cmd_feature_extraction = std::format("\"\"{}\" feature_extractor --database_path \"{}\" --image_path \"{}\"\"", colmap_bin_path, db_path, image_path);
+	std::string cmd_feature_matching = std::format("\"\"{}\" exhaustive_matcher --database_path \"{}\"\"", colmap_bin_path, db_path);
+	std::string cmd_sfm_mapping = std::format("\"\"{}\" mapper --database_path \"{}\" --image_path \"{}\" --output_path \"{}\"\"", colmap_bin_path, db_path, image_path, sparse_path);
+
+	std::system(cmd_feature_extraction.c_str());
+	std::system(cmd_feature_matching.c_str());
+	std::system(cmd_sfm_mapping.c_str());
+	/*std::cout 
+		<< cmd_feature_extraction << std::endl 
+		<< cmd_feature_matching << std::endl
+		<< cmd_sfm_mapping << std::endl;*/
 }
 
 bool Application::init_window_and_device()
@@ -544,6 +565,10 @@ void Application::render_capture_menu()
 
 		if (ImGui::Button("Align")) {
 			m_renderer.align_pointclouds();
+		}
+
+		if (ImGui::Button("Run COLMAP")) {
+			run_colmap();
 		}
 	}
 }

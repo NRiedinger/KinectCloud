@@ -24,6 +24,7 @@ public:
 	void on_resize();
 
 	void capture();
+	void run_colmap();
 
 private:
 	bool init_window_and_device();
