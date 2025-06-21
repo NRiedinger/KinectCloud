@@ -35,7 +35,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
   let viewPos = uniforms.viewMatrix * transformation * vec4f(in.position, 1.0);
   var scale: f32;
   if(viewPos.z >= 0.0){
-    scale = 1.0;
+    scale = 0.25;
   } else {
     let depth = -viewPos.z;
     scale = uniforms.pointSize / depth;
