@@ -23,23 +23,30 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 
-Pointcloud::Pointcloud(wgpu::Device device, wgpu::Queue queue, k4a::image depth_image, k4a::calibration calibration, glm::mat4* transform, glm::quat cam_orientation) {
+Pointcloud::Pointcloud(wgpu::Device device, wgpu::Queue queue, glm::mat4* transform_ptr) {
 	m_device = device;
 	m_queue = queue;
+	m_transform = transform_ptr;
+}
+
+Pointcloud::~Pointcloud()
+{
+	m_gpu_buffer.destroy();
+	m_gpu_buffer.release();
+	m_points.clear();
+}
+
+void Pointcloud::load_from_capture(k4a::image depth_image, k4a::calibration calibration, glm::quat cam_orientation)
+{
 	m_depth_image = depth_image;
 	m_calibration = calibration;
-	m_transform = transform;
-	m_cam_orientation = cam_orientation; 
+	m_cam_orientation = cam_orientation;
 
 	capture_point_cloud();
 }
 
-Pointcloud::Pointcloud(wgpu::Device device, wgpu::Queue queue, glm::mat4* transform, glm::vec3 color, const std::filesystem::path& path, glm::mat4 initial_transform)
+void Pointcloud::load_from_ply(const std::filesystem::path path, glm::mat4 initial_transform, glm::vec3 color)
 {
-	m_device = device;
-	m_queue = queue;
-	m_transform = transform;
-	
 	using namespace tinyply;
 
 	std::ifstream filestream(path, std::ios::binary);
@@ -70,7 +77,7 @@ Pointcloud::Pointcloud(wgpu::Device device, wgpu::Queue queue, glm::mat4* transf
 		glm::vec4 transformed = initial_transform * glm::vec4(
 			-points[i].x,
 			points[i].z,
-			- points[i].y,
+			-points[i].y,
 			1.f
 		);
 
@@ -97,11 +104,62 @@ Pointcloud::Pointcloud(wgpu::Device device, wgpu::Queue queue, glm::mat4* transf
 	write_point_cloud_to_buffer();
 }
 
-Pointcloud::~Pointcloud()
+void Pointcloud::load_from_points3D(const std::filesystem::path path)
 {
-	m_gpu_buffer.destroy();
-	m_gpu_buffer.release();
+	std::ifstream reader(path, std::ios::binary);
+	if (!reader.is_open()) {
+		Logger::log(std::format("Failed to open Points3D file: {}", path.string()), LoggingSeverity::Error);
+		return;
+	}
+
+	uint64_t num_points;
+	reader.read(reinterpret_cast<char*>(&num_points), sizeof(num_points));
+	std::cout << num_points << std::endl;
+
 	m_points.clear();
+
+	for (auto i = 0; i < num_points; i++) {
+		int64_t point_id;
+		reader.read(reinterpret_cast<char*>(&point_id), sizeof(point_id));
+
+		double x, y, z;
+		reader.read(reinterpret_cast<char*>(&x), sizeof(x));
+		reader.read(reinterpret_cast<char*>(&y), sizeof(y));
+		reader.read(reinterpret_cast<char*>(&z), sizeof(z));
+		std::array<float, 3> xyz = {
+			static_cast<float>(x),
+			static_cast<float>(y),
+			static_cast<float>(z),
+		};
+
+		std::array<uint8_t, 3> rgb;
+		reader.read(reinterpret_cast<char*>(rgb.data()), rgb.size());
+
+		double error;
+		reader.read(reinterpret_cast<char*>(&error), sizeof(error));
+
+		uint64_t track_length;
+		reader.read(reinterpret_cast<char*>(&track_length), sizeof(track_length));
+
+		std::vector<int32_t> image_ids(track_length);
+		std::vector<int32_t> point2D_indices(track_length);
+		reader.read(reinterpret_cast<char*>(image_ids.data()), track_length * sizeof(int32_t));
+		reader.read(reinterpret_cast<char*>(point2D_indices.data()), track_length * sizeof(int32_t));
+
+		PointAttributes point;
+
+		point.position = { x, y, z };
+		point.color = { rgb[0], rgb[1], rgb[2] };
+
+		m_points.push_back(point);
+
+		auto len = glm::length(glm::vec3(point.position.x, point.position.y, point.position.z));
+		if (len > m_furthest_point) {
+			m_furthest_point = len;
+		}
+	}
+
+	write_point_cloud_to_buffer();
 }
 
 void Pointcloud::capture_point_cloud()

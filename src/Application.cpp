@@ -448,7 +448,9 @@ void Application::render_capture_menu()
 			if (ImGui::Checkbox("Select", &capture->is_selected)) {
 				if (capture->is_selected) {
 					if (m_renderer.get_num_pointclouds() < POINTCLOUD_MAX_NUM) {
-						capture->data_pointer = m_renderer.add_pointcloud(new Pointcloud(m_device, m_queue, capture->depth_image, capture->calibration, &capture->transform, m_camera.orientation()));
+						auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
+						pc->load_from_capture(capture->depth_image, capture->calibration, m_camera.orientation());
+						capture->data_pointer = m_renderer.add_pointcloud(pc);
 						capture->is_selected = true;
 					}
 					else {
@@ -541,8 +543,9 @@ void Application::render_capture_menu()
 				m_capture_sequence.add_capture(capture);
 				CameraCaptureSequence::s_capturelist_updated = true;
 
-
-				m_renderer.add_pointcloud(new Pointcloud(m_device, m_queue, &capture->transform, { 0.f, 1.f, 0.f }, RESOURCE_DIR "/depth_point_cloud.ply", glm::mat4(1.f)));
+				auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
+				pc->load_from_ply(RESOURCE_DIR "/depth_point_cloud.ply", glm::mat4(1.f), {0.f, 1.f, 0.f});
+				m_renderer.add_pointcloud(pc);
 			}
 
 			{
@@ -556,9 +559,11 @@ void Application::render_capture_menu()
 				m_capture_sequence.add_capture(capture);
 				CameraCaptureSequence::s_capturelist_updated = true;
 
-
 				glm::mat4 initial_transform = glm::translate(glm::mat4(1.f) * glm::toMat4(glm::quat(glm::radians(glm::vec3(0.f, 0.f, 0.f)))), glm::vec3(100.f, 0.f, 0.f));
-				m_renderer.add_pointcloud(new Pointcloud(m_device, m_queue, &capture->transform, { 1.f, 0.f, 0.f }, RESOURCE_DIR "/depth_point_cloud.ply", initial_transform));
+				
+				auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
+				pc->load_from_ply(RESOURCE_DIR "/depth_point_cloud.ply", initial_transform, { 1.f, 0.f, 0.f });
+				m_renderer.add_pointcloud(pc);
 			}
 
 		}
@@ -569,6 +574,20 @@ void Application::render_capture_menu()
 
 		if (ImGui::Button("Run COLMAP")) {
 			run_colmap();
+		}
+
+		if (ImGui::Button("Load COLMAP data")) {
+			CameraCapture* capture = new CameraCapture();
+			capture->name = "COLMAP Pointcloud";
+			capture->is_selected = true;
+			capture->transform = glm::mat4(1.f);
+			capture->camera_orientation = glm::quat();
+			m_capture_sequence.add_capture(capture);
+			CameraCaptureSequence::s_capturelist_updated = true;
+
+			auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
+			pc->load_from_points3D(OUTPUT_DIR "/sparse/0/points3D.bin");
+			m_renderer.add_pointcloud(pc);
 		}
 	}
 }

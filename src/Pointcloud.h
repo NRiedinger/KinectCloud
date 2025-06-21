@@ -9,9 +9,12 @@
 
 class Pointcloud {
 public:
-	Pointcloud(wgpu::Device device, wgpu::Queue queue, k4a::image depth_image, k4a::calibration calibration, glm::mat4* transform, glm::quat cam_orientation);
-	Pointcloud(wgpu::Device device, wgpu::Queue queue, glm::mat4* transform, glm::vec3 color, const std::filesystem::path& path, glm::mat4 initial_transform);
+	Pointcloud(wgpu::Device device, wgpu::Queue queue, glm::mat4* transform_ptr);
 	~Pointcloud();
+
+	void load_from_capture(k4a::image depth_image, k4a::calibration calibration, glm::quat cam_orientation);
+	void load_from_ply(const std::filesystem::path path, glm::mat4 initial_transform, glm::vec3 color);
+	void load_from_points3D(const std::filesystem::path path);
 
 	inline wgpu::Buffer pointbuffer() {
 		return m_gpu_buffer;
