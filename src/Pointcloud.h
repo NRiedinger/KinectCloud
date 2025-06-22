@@ -13,7 +13,7 @@ public:
 	~Pointcloud();
 
 	void load_from_capture(k4a::image depth_image, k4a::calibration calibration, glm::quat cam_orientation);
-	void load_from_ply(const std::filesystem::path path, glm::mat4 initial_transform, glm::vec3 color);
+	void load_from_ply(const std::filesystem::path path, glm::mat4 initial_transform);
 	void load_from_points3D(const std::filesystem::path path);
 
 	inline wgpu::Buffer pointbuffer() {
@@ -44,6 +44,10 @@ public:
 		return m_furthest_point;
 	}
 
+	inline void set_color(glm::vec3 color) {
+		m_color = color;
+	}
+
 private:
 	void capture_point_cloud();
 	void create_xy_table(const k4a::calibration* calibration, k4a::image xy_table);
@@ -52,6 +56,7 @@ private:
 
 private:
 	bool m_is_initialized = false;
+	glm::vec3 m_color = { 1.f, 1.f, 1.f };
 
 	wgpu::Device m_device = nullptr;
 	wgpu::Queue m_queue = nullptr;

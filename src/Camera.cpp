@@ -1,6 +1,6 @@
 #include "Camera.h"
 
-#include "Logger.h"
+#include "Utils.h"
 #include "Structs.h"
 
 #include <glm/glm.hpp>

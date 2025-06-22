@@ -119,9 +119,9 @@ float PointcloudRenderer::get_futhest_point()
 	return value;
 }
 
-void PointcloudRenderer::align_pointclouds()
+void PointcloudRenderer::align_pointclouds(int max_iter, float max_corr_dist)
 {
-	static auto vector_to_pointcloud = [](const std::vector<PointAttributes>& vec) {
+	static auto vector_to_pointcloud = [](const std::vector<PointAttributes>& vec, const glm::mat4 trans_mat) {
 		auto cloud = std::make_shared<pcl::PointCloud<pcl::PointXYZRGB>>();
 		cloud->width = static_cast<uint32_t>(vec.size());
 		cloud->height = 1;
@@ -131,11 +131,17 @@ void PointcloudRenderer::align_pointclouds()
 		for (size_t i = 0; i < vec.size(); i++) {
 			const auto& pt = vec[i];
 
+			glm::vec4 transformed_point = trans_mat * glm::vec4(
+				pt.position.x,
+				pt.position.y,
+				pt.position.z,
+				1.f);
+
 			pcl::PointXYZRGB p;
 
-			p.x = pt.position.x;
-			p.y = pt.position.y;
-			p.z = pt.position.z;
+			p.x = transformed_point.x;
+			p.y = transformed_point.y;
+			p.z = transformed_point.z;
 
 			p.r = static_cast<uint8_t>(pt.color.r * 255.f);
 			p.g = static_cast<uint8_t>(pt.color.g * 255.f);
@@ -163,18 +169,20 @@ void PointcloudRenderer::align_pointclouds()
 		return;
 	}
 
-	auto target_cloud = vector_to_pointcloud(m_pointclouds[0]->points());
+	Logger::log("ICP started");
 
-	// TODO: loop through every pc and align to first
+	auto target_cloud = vector_to_pointcloud(m_pointclouds[0]->points(), *m_pointclouds[0]->get_transform_ptr());
+
+	// TODO: loop through every pc and align to COLMAP pointcloud
 
 	int i = 1;
 
-	auto source_cloud = vector_to_pointcloud(m_pointclouds[i]->points());
+	auto source_cloud = vector_to_pointcloud(m_pointclouds[i]->points(), *m_pointclouds[i]->get_transform_ptr());
 
 
 	pcl::IterativeClosestPoint<pcl::PointXYZRGB, pcl::PointXYZRGB> icp;
-	icp.setMaximumIterations(50);
-	icp.setMaxCorrespondenceDistance(1.0);
+	icp.setMaximumIterations(max_iter);
+	icp.setMaxCorrespondenceDistance(max_corr_dist);
 	icp.setTransformationEpsilon(1e-8);
 	icp.setEuclideanFitnessEpsilon(1);
 
@@ -185,14 +193,16 @@ void PointcloudRenderer::align_pointclouds()
 	icp.align(aligned_cloud);
 
 	if (icp.hasConverged()) {
-		std::cout << "ICP konvergiert nach " << icp.getMaximumIterations() << " Iterationen" << std::endl;
-		std::cout << "Fitness Score: " << icp.getFitnessScore() << std::endl;
+		Logger::log(std::format("ICP converged. Fitness Score: {}", icp.getFitnessScore()));
 
 		// Transformation ausgeben
 		auto transform = eigen_to_glm(icp.getFinalTransformation());
-		std::cout << "Transformationsmatrix:\n" << Util::mat4_to_string(transform) << std::endl;
+		Logger::log(std::format("Transformationmatrix:\n{}", Util::mat4_to_string(transform)));
 
 		m_pointclouds[i]->set_transform(transform);
+	}
+	else {
+		Logger::log("ICP failed to converge.", LoggingSeverity::Warning);
 	}
 }
 

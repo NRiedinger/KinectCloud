@@ -35,8 +35,8 @@ set(SOURCES
 	src/CameraCaptureSequence.h
 	src/CameraCaptureSequence.cpp
 	
-	src/Logger.h
-	src/Logger.cpp
+	src/Utils.h
+	src/Utils.cpp
 	
 	src/PointcloudRenderer.h
 	src/PointcloudRenderer.cpp

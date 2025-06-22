@@ -14,7 +14,7 @@
 #include "utils/glfw3webgpu.h"
 #include "ResourceManager.h"
 #include "Pointcloud.h"
-#include "Logger.h"
+#include "Utils.h"
 #include "Darkmode.h"
 
 Application::Application()
@@ -32,15 +32,13 @@ bool Application::on_init()
 	if (!init_gui())
 		return false;
 
-	// m_camera_active = m_camera.on_init(m_device, m_queue, m_window_width - GUI_MENU_WIDTH, m_window_height - GUI_CONSOLE_HEIGHT);
-
 	if (!m_capture_sequence.on_init(m_camera.color_texture_ptr(), m_camera.depth_image(), m_camera.calibration(), m_camera.device()))
 		return false;
 	
 	if(!m_renderer.on_init(m_device, m_queue, m_window_width - GUI_MENU_WIDTH, m_window_height - GUI_CONSOLE_HEIGHT))
 		return false;
 
-	m_k4a_device_selector.refresh_devices();
+	//m_k4a_device_selector.refresh_devices();
 
 	return true;
 }
@@ -449,6 +447,7 @@ void Application::render_capture_menu()
 				if (capture->is_selected) {
 					if (m_renderer.get_num_pointclouds() < POINTCLOUD_MAX_NUM) {
 						auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
+						pc->set_color(Util::get_pc_color_by_index(i));
 						pc->load_from_capture(capture->depth_image, capture->calibration, m_camera.orientation());
 						capture->data_pointer = m_renderer.add_pointcloud(pc);
 						capture->is_selected = true;
@@ -463,7 +462,7 @@ void Application::render_capture_menu()
 				}
 			}
 
-			if (m_app_state == AppState::Edit && capture->is_selected) {
+			if (m_app_state == AppState::Pointcloud && capture->is_selected) {
 
 				glm::vec3 scale, translation, skew;
 				glm::vec4 perspective;
@@ -472,7 +471,7 @@ void Application::render_capture_menu()
 
 				glm::vec3 rotation_deg = Util::quat_to_euler_degrees(rotation_rad);
 
-				ImGui::SliderFloat3("Position", &translation.x, -500.f, 500.f);
+				ImGui::SliderFloat3("Position", &translation.x, -10.f, 10.f);
 				ImGui::SliderFloat3("Rotation", &rotation_deg.x, -180.f, 180.f);
 				ImGui::SliderFloat("Scale", &scale.x, .1f, 5.f);
 
@@ -511,7 +510,7 @@ void Application::render_capture_menu()
 		if (ImGui::Button("Capture [space]") || ImGui::IsKeyPressed(ImGuiKey_Space)) {
 			capture();
 		}
-		ImGui::SameLine();
+		
 		if (ImGui::Button("Save")) {
 			m_capture_sequence.save_sequence();
 		}
@@ -524,12 +523,12 @@ void Application::render_capture_menu()
 
 			m_renderer.clear_pointclouds();
 		}
-		ImGui::SameLine();
+		
 		if (ImGui::Button("Calibrate")) {
 			m_camera.calibrate_sensors();
 		}
 	}
-	else if (m_app_state == AppState::Edit) {
+	else if (m_app_state == AppState::Pointcloud) {
 		if (ImGui::Button("Load Test-PLY")) {
 
 			{
@@ -544,7 +543,8 @@ void Application::render_capture_menu()
 				CameraCaptureSequence::s_capturelist_updated = true;
 
 				auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
-				pc->load_from_ply(RESOURCE_DIR "/depth_point_cloud.ply", glm::mat4(1.f), {0.f, 1.f, 0.f});
+				pc->set_color({ 0.f, 1.f, 0.f });
+				pc->load_from_ply(RESOURCE_DIR "/depth_point_cloud.ply", glm::mat4(1.f));
 				m_renderer.add_pointcloud(pc);
 			}
 
@@ -562,14 +562,11 @@ void Application::render_capture_menu()
 				glm::mat4 initial_transform = glm::translate(glm::mat4(1.f) * glm::toMat4(glm::quat(glm::radians(glm::vec3(0.f, 0.f, 0.f)))), glm::vec3(100.f, 0.f, 0.f));
 				
 				auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
-				pc->load_from_ply(RESOURCE_DIR "/depth_point_cloud.ply", initial_transform, { 1.f, 0.f, 0.f });
+				pc->set_color({ 1.f, 0.f, 0.f });
+				pc->load_from_ply(RESOURCE_DIR "/depth_point_cloud.ply", initial_transform);
 				m_renderer.add_pointcloud(pc);
 			}
 
-		}
-
-		if (ImGui::Button("Align")) {
-			m_renderer.align_pointclouds();
 		}
 
 		if (ImGui::Button("Run COLMAP")) {
@@ -588,6 +585,17 @@ void Application::render_capture_menu()
 			auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
 			pc->load_from_points3D(OUTPUT_DIR "/sparse/0/points3D.bin");
 			m_renderer.add_pointcloud(pc);
+		}
+
+		ImGui::Separator();
+		ImGui::Text("ICP settings");
+		static int icp_max_iter = 50;
+		static float icp_max_corr_dist = 1.f;
+		ImGui::SliderInt("Max. Iterations", &icp_max_iter, 1, 50);
+		ImGui::SliderFloat("Max. Correspondence Distance", &icp_max_corr_dist, 0.01, 5.0);
+
+		if (ImGui::Button("Align")) {
+			m_renderer.align_pointclouds(icp_max_iter, icp_max_corr_dist);
 		}
 	}
 }
@@ -645,7 +653,7 @@ void Application::render_content()
 			m_camera.on_frame();
 			break;
 
-		case AppState::Edit:
+		case AppState::Pointcloud:
 			m_renderer.on_frame();
 			break;
 
@@ -722,14 +730,14 @@ void Application::render_menu()
 	ImGui::SameLine();
 
 
-	if (app_state == AppState::Edit)
+	if (app_state == AppState::Pointcloud)
 		ImGui::PushStyleColor(ImGuiCol_Button, active_button_color);
 
-	if (ImGui::Button("Edit", ImVec2(available_width.x / 2, 40))) {
-		m_app_state = AppState::Edit;
+	if (ImGui::Button("Pointcloud", ImVec2(available_width.x / 2, 40))) {
+		m_app_state = AppState::Pointcloud;
 	}
 
-	if (app_state == AppState::Edit)
+	if (app_state == AppState::Pointcloud)
 		ImGui::PopStyleColor();
 
 	ImGui::PopStyleVar();

@@ -79,6 +79,23 @@ public:
 		return glm::vec2(sx, sy);
 	}
 	
+	inline static glm::vec3 get_pc_color_by_index(int index) {
+		switch (index) {
+			case 0:  return glm::vec3(1.0f, 0.0f, 0.0f);   // Rot
+			case 1:  return glm::vec3(0.0f, 1.0f, 0.0f);   // Grün
+			case 2:  return glm::vec3(0.0f, 0.0f, 1.0f);   // Blau
+			case 3:  return glm::vec3(1.0f, 1.0f, 0.0f);   // Gelb
+			case 4:  return glm::vec3(1.0f, 0.0f, 1.0f);   // Magenta
+			case 5:  return glm::vec3(0.0f, 1.0f, 1.0f);   // Cyan
+			case 6:  return glm::vec3(1.0f, 0.5f, 0.0f);   // Orange
+			case 7:  return glm::vec3(0.5f, 0.0f, 1.0f);   // Violett
+			case 8:  return glm::vec3(0.3f, 0.7f, 0.2f);   // Olivgrün
+			case 9:  return glm::vec3(0.7f, 0.3f, 0.6f);   // Rosa-Lila
+			case 10: return glm::vec3(0.4f, 0.4f, 0.4f);   // Grau
+			default:
+				return glm::vec3(1.f, 1.f, 1.f);
+		}
+	}
 };
 
 

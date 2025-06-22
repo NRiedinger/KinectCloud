@@ -3,7 +3,7 @@
 
 #include "Structs.h"
 #include "Pointcloud.h"
-#include "Logger.h"
+#include "Utils.h"
 
 #include <imgui.h>
 
@@ -29,7 +29,7 @@ public:
 	int get_num_vertices();
 	float get_futhest_point();
 
-	void align_pointclouds();
+	void align_pointclouds(int max_iter, float max_corr_dist);
 
 private:
 	bool init_rendertarget();

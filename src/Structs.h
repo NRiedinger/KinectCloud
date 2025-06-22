@@ -17,7 +17,7 @@
 #define DEFAULT_WINDOW_W 1280
 #define DEFAULT_WINDOW_H 720
 
-#define GUI_MENU_WIDTH 500.f
+#define GUI_MENU_WIDTH 800.f
 #define GUI_CAPTURELIST_HEIGHT 500.f
 #define GUI_CAPTURELIST_INDENT 20.f
 #define GUI_CONSOLE_HEIGHT 300.f
@@ -41,7 +41,7 @@
 enum class AppState {
 	Default,
 	Capture,
-	Edit
+	Pointcloud
 };
 
 struct BgraPixel {

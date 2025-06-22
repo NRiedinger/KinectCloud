@@ -1,5 +1,5 @@
 #include "CameraCaptureSequence.h"
-#include "Logger.h"
+#include "Utils.h"
 
 #include <algorithm>
 #include <format>
@@ -43,7 +43,7 @@ void CameraCaptureSequence::save_sequence()
 {
 	int i = 0;
 	for (auto& capture : m_captures) {
-		auto path = OUTPUT_DIR + std::format("/{}.png", capture->name);
+		auto path = OUTPUT_DIR + std::format("/images/{}.png", capture->name);
 		bool success = !!stbi_write_png(
 			path.c_str(),
 			capture->image_color_width,

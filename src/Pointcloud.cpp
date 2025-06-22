@@ -1,7 +1,7 @@
 #include "Pointcloud.h"
 
 #include "ResourceManager.h"
-#include "Logger.h"
+#include "Utils.h"
 
 #include <imgui.h>
 #include <glm/glm.hpp>
@@ -45,7 +45,7 @@ void Pointcloud::load_from_capture(k4a::image depth_image, k4a::calibration cali
 	capture_point_cloud();
 }
 
-void Pointcloud::load_from_ply(const std::filesystem::path path, glm::mat4 initial_transform, glm::vec3 color)
+void Pointcloud::load_from_ply(const std::filesystem::path path, glm::mat4 initial_transform)
 {
 	using namespace tinyply;
 
@@ -89,9 +89,9 @@ void Pointcloud::load_from_ply(const std::filesystem::path path, glm::mat4 initi
 		point.position.y = transformed.y;
 		point.position.z = transformed.z;
 
-		point.color.r = color.r;
-		point.color.g = color.g;
-		point.color.b = color.b;
+		point.color.r = m_color.r;
+		point.color.g = m_color.g;
+		point.color.b = m_color.b;
 
 		m_points.push_back(point);
 
@@ -256,9 +256,9 @@ void Pointcloud::generate_point_cloud(const k4a::image depth_image, const k4a::i
 		point.position.y = (float)point_cloud_data[i].xyz.z;
 		point.position.z = (float)-point_cloud_data[i].xyz.y;
 
-		point.color.r = 1.f;
-		point.color.g = 0.f;
-		point.color.b = 0.f;
+		point.color.r = m_color.r;
+		point.color.g = m_color.g;
+		point.color.b = m_color.b;
 
 		m_points.push_back(point);
 	}
