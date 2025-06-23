@@ -511,9 +511,9 @@ void Application::render_capture_menu()
 			capture();
 		}
 		
-		if (ImGui::Button("Save")) {
+		/*if (ImGui::Button("Save")) {
 			m_capture_sequence.save_sequence();
-		}
+		}*/
 		ImGui::SameLine();
 		if (ImGui::Button("Reset")) {
 			for (auto capture : m_capture_sequence.captures()) {
@@ -527,6 +527,40 @@ void Application::render_capture_menu()
 		if (ImGui::Button("Calibrate")) {
 			m_camera.calibrate_sensors();
 		}
+
+
+
+		{
+			if (m_capture_sequence.captures().size() < 1)
+				ImGui::BeginDisabled();
+
+			if (ImGui::Button("Generate Pointcloud")) {
+				// save all captured images to /output/images
+				m_capture_sequence.save_sequence();
+
+				// run colmap on saved images
+				run_colmap();
+				
+				//
+				CameraCapture* capture = new CameraCapture();
+				capture->name = "COLMAP Pointcloud";
+				capture->is_selected = true;
+				capture->transform = glm::mat4(1.f);
+				capture->camera_orientation = glm::quat();
+				m_capture_sequence.add_capture(capture);
+				CameraCaptureSequence::s_capturelist_updated = true;
+
+				auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
+				pc->load_from_points3D(OUTPUT_DIR "/sparse/0/points3D.bin");
+				m_renderer.add_pointcloud(pc);
+
+				m_app_state = AppState::Pointcloud;
+			}
+
+			if (m_capture_sequence.captures().size() < 1)
+				ImGui::EndDisabled();
+		}
+		
 	}
 	else if (m_app_state == AppState::Pointcloud) {
 		if (ImGui::Button("Load Test-PLY")) {
@@ -569,7 +603,7 @@ void Application::render_capture_menu()
 
 		}
 
-		if (ImGui::Button("Run COLMAP")) {
+		/*if (ImGui::Button("Run COLMAP")) {
 			run_colmap();
 		}
 
@@ -585,7 +619,7 @@ void Application::render_capture_menu()
 			auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
 			pc->load_from_points3D(OUTPUT_DIR "/sparse/0/points3D.bin");
 			m_renderer.add_pointcloud(pc);
-		}
+		}*/
 
 		ImGui::Separator();
 		ImGui::Text("ICP settings");
