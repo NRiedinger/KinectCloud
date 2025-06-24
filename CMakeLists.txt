@@ -5,6 +5,9 @@ project(
     LANGUAGES CXX C # programming languages used by the project
 )
 
+include(C:/vcpkg/scripts/buildsystems/vcpkg.cmake)
+
+
 # Include glfw directory
 add_subdirectory(libs/glfw)
 # Include webgpu directory, to define the 'webgpu' target
@@ -32,14 +35,17 @@ set(SOURCES
 	src/CameraCaptureSequence.h
 	src/CameraCaptureSequence.cpp
 	
-	src/Logger.h
-	src/Logger.cpp
+	src/Helpers.h
+	src/Helpers.cpp
 	
 	src/PointcloudRenderer.h
 	src/PointcloudRenderer.cpp
 	
 	src/Pointcloud.h
 	src/Pointcloud.cpp
+	
+	src/K4ADeviceSelector.cpp
+	src/K4ADeviceSelector.h
 	
 	src/Darkmode.h
 	src/Darkmode.cpp
@@ -53,6 +59,10 @@ set(SOURCES
 	src/utils/glfw3webgpu.c
 	src/utils/glfw3webgpu.h
 	src/utils/stb_image_write.h
+	src/utils/imfilebrowser.h
+	
+	src/utils/k4aimguiextensions.h
+	src/utils/k4aimguiextensions.cpp
 )
 add_executable(App ${SOURCES})
 
@@ -78,6 +88,8 @@ add_custom_command(TARGET App POST_BUILD
 )
 
 
+# PCL
+find_package(PCL REQUIRED COMPONENTS io common registration)
 
 # add libraries as dependency to App
 set(LIBRARIES
@@ -85,6 +97,7 @@ set(LIBRARIES
 	glfw
 	imgui
 	k4a
+	${PCL_LIBRARIES}
 )
 target_link_libraries(App PRIVATE ${LIBRARIES})
 
@@ -93,9 +106,11 @@ option(DEV_MODE "set up development helper settings" ON)
 if(DEV_MODE)
 	target_compile_definitions(App PRIVATE RESOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/resources")
 	target_compile_definitions(App PRIVATE OUTPUT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/output")
+	target_compile_definitions(App PRIVATE TOOLS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tools")
 else()
 	target_compile_definitions(App PRIVATE RESOURCE_DIR="./resources")
 	target_compile_definitions(App PRIVATE OUTPUT_DIR="./output")
+	target_compile_definitions(App PRIVATE TOOLS_DIR="./tools")
 endif()
 
 

@@ -1,12 +1,10 @@
 #include "PointcloudRenderer.h"
 
 #include "ResourceManager.h"
-#include "Logger.h"
 
-#include <imgui.h>
-#include <glm/glm.hpp>
-#include <glm/ext.hpp>
+
 #include <GLFW/glfw3.h>
+
 
 #include <vector>
 #include <unordered_map>
@@ -15,6 +13,11 @@
 
 #define _USE_MATH_DEFINES
 #include <math.h>
+
+#include <pcl/point_types.h>
+#include <pcl/point_cloud.h>
+#include <pcl/registration/icp.h>
+#include <pcl/io/pcd_io.h>
 
 
 bool PointcloudRenderer::on_init(wgpu::Device device, wgpu::Queue queue, int width, int height)
@@ -66,8 +69,19 @@ void PointcloudRenderer::on_resize(int width, int height)
 	init_depthbuffer();
 }
 
-void PointcloudRenderer::add_pointcloud(Pointcloud* pc) {
+Pointcloud* PointcloudRenderer::add_pointcloud(Pointcloud* pc) {
 	m_pointclouds.push_back(pc);
+
+	return pc;
+}
+
+
+void PointcloudRenderer::remove_pointcloud(Pointcloud* ptr_to_remove)
+{
+	m_pointclouds.erase(
+		std::remove(m_pointclouds.begin(), m_pointclouds.end(), ptr_to_remove),
+		m_pointclouds.end()
+	);
 }
 
 void PointcloudRenderer::clear_pointclouds()
@@ -76,6 +90,121 @@ void PointcloudRenderer::clear_pointclouds()
 		delete pc;
 	}
 	m_pointclouds.clear();
+}
+
+size_t PointcloudRenderer::get_num_pointclouds()
+{
+	return m_pointclouds.size();
+}
+
+int PointcloudRenderer::get_num_vertices()
+{
+	int num = 0;
+	for (auto pc : m_pointclouds) {
+		num += pc->pointcount();
+	}
+	return num;
+}
+
+float PointcloudRenderer::get_futhest_point()
+{
+	float value = 0.f;
+
+	for (auto pc : m_pointclouds) {
+		float furthest = pc->furthest_point();
+		if (furthest > value) {
+			value = furthest;
+		}
+	}
+	
+	return value;
+}
+
+void PointcloudRenderer::align_pointclouds(int max_iter, float max_corr_dist)
+{
+	static auto vector_to_pointcloud = [](const std::vector<PointAttributes>& vec, const glm::mat4 trans_mat) {
+		auto cloud = std::make_shared<pcl::PointCloud<pcl::PointXYZRGB>>();
+		cloud->width = static_cast<uint32_t>(vec.size());
+		cloud->height = 1;
+		cloud->is_dense = false;
+		cloud->points.resize(vec.size());
+
+		for (size_t i = 0; i < vec.size(); i++) {
+			const auto& pt = vec[i];
+
+			glm::vec4 transformed_point = trans_mat * glm::vec4(
+				pt.position.x,
+				pt.position.y,
+				pt.position.z,
+				1.f);
+
+			pcl::PointXYZRGB p;
+
+			p.x = transformed_point.x;
+			p.y = transformed_point.y;
+			p.z = transformed_point.z;
+
+			p.r = static_cast<uint8_t>(pt.color.r * 255.f);
+			p.g = static_cast<uint8_t>(pt.color.g * 255.f);
+			p.b = static_cast<uint8_t>(pt.color.b * 255.f);
+
+			cloud->points[i] = p;
+		}
+
+		return cloud;
+	};
+
+	static auto eigen_to_glm = [](const Eigen::Matrix4f& eigen_mat) {
+		glm::mat4 glm_mat;
+
+		for (int row = 0; row < 4; row++) {
+			for (int col = 0; col < 4; col++) {
+				glm_mat[col][row] = eigen_mat(row, col);
+			}
+		}
+
+		return glm_mat;
+	};
+
+	if (m_pointclouds.size() < 2) {
+		return;
+	}
+
+	Logger::log("ICP started");
+
+	auto target_cloud = vector_to_pointcloud(m_pointclouds[0]->points(), *m_pointclouds[0]->get_transform_ptr());
+
+	// TODO: loop through every pc and align to COLMAP pointcloud
+
+	int i = 1;
+
+	auto source_cloud = vector_to_pointcloud(m_pointclouds[i]->points(), *m_pointclouds[i]->get_transform_ptr());
+
+
+	pcl::IterativeClosestPoint<pcl::PointXYZRGB, pcl::PointXYZRGB> icp;
+	icp.setMaximumIterations(max_iter);
+	icp.setMaxCorrespondenceDistance(max_corr_dist);
+	icp.setTransformationEpsilon(1e-8);
+	icp.setEuclideanFitnessEpsilon(1);
+
+	icp.setInputSource(source_cloud);
+	icp.setInputTarget(target_cloud);
+
+	pcl::PointCloud<pcl::PointXYZRGB> aligned_cloud;
+	icp.align(aligned_cloud);
+
+	if (icp.hasConverged()) {
+		Logger::log(std::format("ICP converged. Fitness Score: {}", icp.getFitnessScore()));
+
+		// Transformation ausgeben
+		auto transform = eigen_to_glm(icp.getFinalTransformation());
+		Logger::log(std::format("Transformationmatrix:\n{}", Helper::mat4_to_string(transform)));
+
+		m_pointclouds[i]->set_transform(transform);
+	}
+	else {
+		Logger::log("ICP failed to converge.", LoggingSeverity::Warning);
+	}
 }
 
 bool PointcloudRenderer::is_initialized()
@@ -97,33 +226,24 @@ bool PointcloudRenderer::init_renderpipeline()
 	Logger::log("Creating render pipeline...");
 	wgpu::RenderPipelineDescriptor renderpipeline_desc{};
 
-	std::vector<wgpu::VertexAttribute> vertex_attribs(4);
+	std::vector<wgpu::VertexAttribute> vertex_attribs(2);
 
 	// position attribute
 	vertex_attribs[0].shaderLocation = 0;
 	vertex_attribs[0].format = wgpu::VertexFormat::Float32x3;
 	vertex_attribs[0].offset = 0;
 
-	// normal attribute
+	// color attribute
 	vertex_attribs[1].shaderLocation = 1;
 	vertex_attribs[1].format = wgpu::VertexFormat::Float32x3;
-	vertex_attribs[1].offset = offsetof(VertexAttributes, normal);
+	vertex_attribs[1].offset = offsetof(PointAttributes, color);
 
-	// color attribute
-	vertex_attribs[2].shaderLocation = 2;
-	vertex_attribs[2].format = wgpu::VertexFormat::Float32x3;
-	vertex_attribs[2].offset = offsetof(VertexAttributes, color);
-
-	// uv attribute
-	vertex_attribs[3].shaderLocation = 3;
-	vertex_attribs[3].format = wgpu::VertexFormat::Float32x2;
-	vertex_attribs[3].offset = offsetof(VertexAttributes, uv);
 
 	wgpu::VertexBufferLayout vertexbuffer_layout;
-	vertexbuffer_layout.attributeCount = (uint32_t)vertex_attribs.size();
+	vertexbuffer_layout.attributeCount = vertex_attribs.size();
 	vertexbuffer_layout.attributes = vertex_attribs.data();
-	vertexbuffer_layout.arrayStride = sizeof(VertexAttributes);
-	vertexbuffer_layout.stepMode = wgpu::VertexStepMode::Vertex;
+	vertexbuffer_layout.arrayStride = sizeof(PointAttributes);
+	vertexbuffer_layout.stepMode = wgpu::VertexStepMode::Instance;
 
 
 	renderpipeline_desc.vertex.bufferCount = 1;
@@ -135,8 +255,7 @@ bool PointcloudRenderer::init_renderpipeline()
 	renderpipeline_desc.vertex.constants = nullptr;
 
 
-	// renderPipelineDesc.primitive.topology = wgpu::PrimitiveTopology::TriangleList;
-	renderpipeline_desc.primitive.topology = wgpu::PrimitiveTopology::PointList;
+	renderpipeline_desc.primitive.topology = wgpu::PrimitiveTopology::TriangleList;
 	renderpipeline_desc.primitive.stripIndexFormat = wgpu::IndexFormat::Undefined;
 	renderpipeline_desc.primitive.frontFace = wgpu::FrontFace::CCW;
 	renderpipeline_desc.primitive.cullMode = wgpu::CullMode::None;
@@ -181,15 +300,22 @@ bool PointcloudRenderer::init_renderpipeline()
 
 
 	// binding layout
-	wgpu::BindGroupLayoutEntry bindgroup_layout_entry = wgpu::Default;
-	bindgroup_layout_entry.binding = 0;
-	bindgroup_layout_entry.visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
-	bindgroup_layout_entry.buffer.type = wgpu::BufferBindingType::Uniform;
-	bindgroup_layout_entry.buffer.minBindingSize = sizeof(Uniforms::RenderUniforms);
+	wgpu::BindGroupLayoutEntry bindgroup_layout_entries[] = {wgpu::Default, wgpu::Default};
+	bindgroup_layout_entries[0].binding = 0;
+	bindgroup_layout_entries[0].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
+	bindgroup_layout_entries[0].buffer.type = wgpu::BufferBindingType::Uniform;
+	bindgroup_layout_entries[0].buffer.minBindingSize = sizeof(Uniforms::RenderUniforms);
+	bindgroup_layout_entries[0].buffer.hasDynamicOffset = false;
+
+	bindgroup_layout_entries[1].binding = 1;
+	bindgroup_layout_entries[1].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
+	bindgroup_layout_entries[1].buffer.type = wgpu::BufferBindingType::Uniform;
+	bindgroup_layout_entries[1].buffer.minBindingSize = sizeof(glm::mat4);
+	bindgroup_layout_entries[1].buffer.hasDynamicOffset = true;
 
 	wgpu::BindGroupLayoutDescriptor bindgroup_layout_desc{};
-	bindgroup_layout_desc.entryCount = 1;
-	bindgroup_layout_desc.entries = &bindgroup_layout_entry;
+	bindgroup_layout_desc.entryCount = 2;
+	bindgroup_layout_desc.entries = bindgroup_layout_entries;
 	m_bindgroup_layout = m_device.createBindGroupLayout(bindgroup_layout_desc);
 	if (!m_bindgroup_layout) {
 		Logger::log("Could not create bind group layout!", LoggingSeverity::Error);
@@ -228,24 +354,37 @@ void PointcloudRenderer::terminate_renderpipeline()
 
 bool PointcloudRenderer::init_uniforms()
 {
-	wgpu::BufferDescriptor bufferDesc{};
-	bufferDesc.size = sizeof(Uniforms::RenderUniforms);
-	bufferDesc.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform;
-	bufferDesc.mappedAtCreation = false;
-	m_renderuniform_buffer = m_device.createBuffer(bufferDesc);
+	wgpu::BufferDescriptor buffer_desc{};
+	buffer_desc.size = sizeof(Uniforms::RenderUniforms);
+	buffer_desc.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform;
+	buffer_desc.mappedAtCreation = false;
+	m_renderuniform_buffer = m_device.createBuffer(buffer_desc);
 	if (!m_renderuniform_buffer) {
 		std::cerr << "Could not create render uniform buffer!" << std::endl;
 		return false;
 	}
 
 	// initial uniform values
-	m_renderuniforms.modelMatrix = glm::scale(glm::mat4(1.0), glm::vec3(0.1));
-	/*m_renderuniforms.viewMatrix = glm::lookAt(glm::vec3(-5.f, -5.f, 3.f), glm::vec3(0.0f), glm::vec3(0, 0, 1));
-	m_renderuniforms.projectionMatrix = glm::perspective((float)(45 * M_PI / 180), (float)(m_window_width / m_window_height), 0.01f, 100.0f);*/
+	m_renderuniforms.model_mat = glm::scale(glm::mat4(1.0), glm::vec3(1.0));
+	m_renderuniforms.point_size = .1f;
 	m_queue.writeBuffer(m_renderuniform_buffer, 0, &m_renderuniforms, sizeof(Uniforms::RenderUniforms));
 
 	update_viewmatrix();
 	update_projectionmatrix();
+
+	wgpu::BufferDescriptor transform_buffer_desc{};
+	transform_buffer_desc.size = sizeof(glm::mat4) * POINTCLOUD_MAX_NUM;
+	transform_buffer_desc.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform;
+	transform_buffer_desc.mappedAtCreation = false;
+	m_transform_buffer = m_device.createBuffer(transform_buffer_desc);
+	if (!m_transform_buffer) {
+		std::cerr << "Could not create transform buffer!" << std::endl;
+	}
+	glm::mat4 default_transform(1.f);
+	for (int i = 0; i < POINTCLOUD_MAX_NUM; i++) {
+		uint32_t ubo_offset = sizeof(glm::mat4) * i;
+		m_queue.writeBuffer(m_transform_buffer, ubo_offset, &default_transform, sizeof(glm::mat4));
+	}
 
 	return true;
 }
@@ -258,16 +397,21 @@ void PointcloudRenderer::terminate_uniforms()
 
 bool PointcloudRenderer::init_bindgroup()
 {
-	wgpu::BindGroupEntry binding;
-	binding.binding = 0;
-	binding.buffer = m_renderuniform_buffer;
-	binding.offset = 0;
-	binding.size = sizeof(Uniforms::RenderUniforms);
+	wgpu::BindGroupEntry bindings[] = {wgpu::Default, wgpu::Default};
+	bindings[0].binding = 0;
+	bindings[0].buffer = m_renderuniform_buffer;
+	bindings[0].offset = 0;
+	bindings[0].size = sizeof(Uniforms::RenderUniforms);
+
+	bindings[1].binding = 1;
+	bindings[1].buffer = m_transform_buffer;
+	bindings[1].offset = 0;
+	bindings[1].size = sizeof(glm::mat4);
 
 	wgpu::BindGroupDescriptor bindGroupDesc{};
 	bindGroupDesc.layout = m_bindgroup_layout;
-	bindGroupDesc.entryCount = 1;
-	bindGroupDesc.entries = &binding;
+	bindGroupDesc.entryCount = 2;
+	bindGroupDesc.entries = bindings;
 	m_bindgroup = m_device.createBindGroup(bindGroupDesc);
 	if (!m_bindgroup) {
 		std::cerr << "Could not create bind group!" << std::endl;
@@ -330,15 +474,15 @@ void PointcloudRenderer::terminate_rendertarget()
 void PointcloudRenderer::update_projectionmatrix()
 {
 	float ratio = m_width / m_height;
-	m_renderuniforms.projectionMatrix = glm::perspective((float)(45 * M_PI / 180), ratio, .01f, 1000.f);
-	m_queue.writeBuffer(m_renderuniform_buffer, offsetof(Uniforms::RenderUniforms, projectionMatrix), &m_renderuniforms.projectionMatrix, sizeof(Uniforms::RenderUniforms::projectionMatrix));
+	m_renderuniforms.projection_mat = glm::perspective((float)(45 * M_PI / 180), ratio, POINTCLOUD_CAMERA_PLANE_NEAR, POINTCLOUD_CAMERA_PLANE_FAR);
+	m_queue.writeBuffer(m_renderuniform_buffer, offsetof(Uniforms::RenderUniforms, projection_mat), &m_renderuniforms.projection_mat, sizeof(Uniforms::RenderUniforms::projection_mat));
 }
 
 void PointcloudRenderer::update_viewmatrix()
 {
 	glm::vec3 position = m_camerastate.get_camera_position();
-	m_renderuniforms.viewMatrix = glm::lookAt(position, glm::vec3(0.f), glm::vec3(0, 0, 1));
-	m_queue.writeBuffer(m_renderuniform_buffer, offsetof(Uniforms::RenderUniforms, viewMatrix), &m_renderuniforms.viewMatrix, sizeof(Uniforms::RenderUniforms::viewMatrix));
+	m_renderuniforms.view_mat = glm::lookAt(position, glm::vec3(0.f), glm::vec3(0, 0, 1));
+	m_queue.writeBuffer(m_renderuniform_buffer, offsetof(Uniforms::RenderUniforms, view_mat), &m_renderuniforms.view_mat, sizeof(Uniforms::RenderUniforms::view_mat));
 }
 
 void PointcloudRenderer::handle_pointcloud_mouse_events()
@@ -375,16 +519,24 @@ void PointcloudRenderer::handle_pointcloud_mouse_events()
 	}
 }
 
+void PointcloudRenderer::reload_renderpipeline()
+{
+	terminate_renderpipeline();
+	init_renderpipeline();
+}
+
+Uniforms::RenderUniforms& PointcloudRenderer::uniforms()
+{
+	return m_renderuniforms;
+}
+
+
 void PointcloudRenderer::on_frame()
 {
 	wgpu::TextureView next_texture = m_rendertarget_texture_view;
 	if (!next_texture) {
 		return;
 	}
-
-	wgpu::CommandEncoderDescriptor command_encoder_desc{};
-	command_encoder_desc.label = "command encoder";
-	wgpu::CommandEncoder encoder = m_device.createCommandEncoder(command_encoder_desc);
 
 	wgpu::RenderPassDescriptor renderpass_desc{};
 
@@ -414,14 +566,56 @@ void PointcloudRenderer::on_frame()
 
 	renderpass_desc.timestampWrites = nullptr;
 
-	wgpu::RenderPassEncoder renderpass = encoder.beginRenderPass(renderpass_desc);
+	wgpu::CommandEncoderDescriptor command_encoder_desc{};
+	command_encoder_desc.label = "command encoder";
+	wgpu::CommandEncoder encoder = m_device.createCommandEncoder(command_encoder_desc);
 
+	wgpu::RenderPassEncoder passEncoder = encoder.beginRenderPass(renderpass_desc);
+
+	m_queue.writeBuffer(m_renderuniform_buffer, offsetof(Uniforms::RenderUniforms, point_size), &m_renderuniforms.point_size, sizeof(Uniforms::RenderUniforms::point_size));
+
+	// render each pointcloud
+	int i = 0;
 	for (auto pc : m_pointclouds) {
-		renderpass.setPipeline(m_renderpipeline);
-		renderpass.setVertexBuffer(0, pc->vertexbuffer(), 0, pc->vertexbuffer().getSize()/*m_vertexCount * sizeof(VertexAttributes)*/);
-		renderpass.setBindGroup(0, m_bindgroup, 0, nullptr);
-		renderpass.draw(pc->vertexcount(), 1, 0, 0);
+
+		// glm::mat4 model = glm::scale(*pc->get_transform_ptr(), glm::vec3(100.f / get_futhest_point()));
+		glm::mat4 model = glm::scale(*pc->get_transform_ptr(), glm::vec3(1.f));
+		glm::quat cam_orienation = pc->camera_orienation();
+
+		glm::vec3 world_up = glm::vec3(0.f, 0.f, 1.f);
+		glm::vec3 camera_up = cam_orienation * world_up;
+		float dot = glm::clamp(glm::dot(camera_up, world_up), -1.f, 1.f);
+		glm::vec3 axis = glm::cross(camera_up, world_up);
+		float angle = std::acos(dot);
+		glm::quat leveling;
+		if (glm::length2(axis) < 1e-6f) {
+			leveling = glm::quat(1, 0, 0, 0);
+		}
+		else {
+			leveling = glm::angleAxis(angle, glm::normalize(axis));
+		}
+		glm::mat4 leveled_model = glm::toMat4(leveling) * model;
+
+		uint32_t ubo_offset = sizeof(glm::mat4) * i;
+		m_queue.writeBuffer(m_transform_buffer, ubo_offset, &leveled_model, sizeof(glm::mat4));
+
+		passEncoder.setPipeline(m_renderpipeline);
+		passEncoder.setVertexBuffer(0, pc->pointbuffer(), 0, pc->pointbuffer().getSize());
+		passEncoder.setBindGroup(0, m_bindgroup, 1, &ubo_offset);
+		passEncoder.draw(6, pc->pointcount(), 0, 0);
+
+		i++;
 	}
+
+	passEncoder.end();
+	passEncoder.release();
+
+	wgpu::CommandBufferDescriptor commandbuffer_desc{};
+	commandbuffer_desc.label = "command buffer";
+	wgpu::CommandBuffer command = encoder.finish(commandbuffer_desc);
+
+	encoder.release();
+	m_queue.submit(command);
 
 	ImGui::Begin("Pointcloud Window", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
 	ImGui::SetWindowPos({ GUI_MENU_WIDTH, 0.f });
@@ -432,18 +626,10 @@ void PointcloudRenderer::on_frame()
 	// handle input
 	handle_pointcloud_mouse_events();
 
+	draw_gizmos();
+	
+
 	ImGui::End();
-
-
-	renderpass.end();
-	renderpass.release();
-
-	wgpu::CommandBufferDescriptor commandbuffer_desc{};
-	commandbuffer_desc.label = "command buffer";
-	wgpu::CommandBuffer command = encoder.finish(commandbuffer_desc);
-
-	encoder.release();
-	m_queue.submit(command);
 }
 
 bool PointcloudRenderer::init_depthbuffer()

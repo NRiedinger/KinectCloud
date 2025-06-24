@@ -1,5 +1,5 @@
 #include "CameraCaptureSequence.h"
-#include "Logger.h"
+#include "Helpers.h"
 
 #include <algorithm>
 #include <format>
@@ -11,13 +11,10 @@
 #define __STDC_LIB_EXT1__
 #include "utils/stb_image_write.h"
 
-bool CameraCaptureSequence::on_init(Texture* color_texture_pointer, k4a::image* depth_image, k4a::calibration calibration)
+bool CameraCaptureSequence::on_init()
 {
     m_captures.clear();
     m_initialized = true;
-	m_color_texture_pointer = color_texture_pointer;
-	m_depth_image = depth_image;
-	m_calibration = calibration;
 
     return true;
 }
@@ -31,40 +28,31 @@ void CameraCaptureSequence::on_terminate()
     m_initialized = false;
 }
 
-void CameraCaptureSequence::on_capture()
-{
-	std::string capture_name = std::format("{}", m_captures.size());
-	std::string filepath = OUTPUT_DIR + std::format("/{}.png", capture_name);
-
-	CameraCapture* capture = new CameraCapture();
-	capture->name = capture_name;
-	capture->image_color_width = m_color_texture_pointer->width();
-	capture->image_color_height = m_color_texture_pointer->height();
-	if (!m_color_texture_pointer->save_to_buffer((unsigned char**)&capture->image_color_data)) {
-		Logger::log("Failed to save color texture to capture data buffer", LoggingSeverity::Error);
-	}
-	capture->is_selected = false;
-	capture->calibration = m_calibration;
-	capture->depth_image = k4a::image(*m_depth_image);
-	m_captures.push_back(capture);
-	CameraCaptureSequence::s_capturelist_updated = true;
-}
 
 bool CameraCaptureSequence::is_initialized()
 {
     return m_initialized;
 }
 
-void CameraCaptureSequence::render_menu()
-{
-	
-}
 
 void CameraCaptureSequence::save_sequence()
 {
+	std::filesystem::path images_dir_path = OUTPUT_DIR "/images";
+	if (!std::filesystem::exists(images_dir_path)) {
+		// if directory does not exist, create it
+		Logger::log("/output/images/ does not exist. Creating...");
+		std::filesystem::create_directories(images_dir_path);
+	}
+	else {
+		// if directory exists, delete all previous images
+		for (const auto& file : std::filesystem::directory_iterator(images_dir_path)) {
+			std::filesystem::remove_all(file.path());
+		}
+	}
+	
 	int i = 0;
 	for (auto& capture : m_captures) {
-		auto path = OUTPUT_DIR + std::format("/{}.png", capture->name);
+		std::string path = std::format("{}/{}.png", images_dir_path.string(), capture->name);
 		bool success = !!stbi_write_png(
 			path.c_str(),
 			capture->image_color_width,
@@ -104,5 +92,10 @@ std::vector<std::string> CameraCaptureSequence::get_captures_names()
 std::vector<CameraCapture*>& CameraCaptureSequence::captures()
 {
 	return m_captures;
+}
+
+void CameraCaptureSequence::add_capture(CameraCapture* capture)
+{
+	m_captures.push_back(capture);
 }
 

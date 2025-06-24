@@ -2,13 +2,12 @@
 #include <webgpu/webgpu.hpp>
 #include <string>
 
-#include <imgui.h>
-
 #include "Structs.h"
 #include "Texture.h"
 #include "Camera.h"
 #include "PointcloudRenderer.h"
 #include "CameraCaptureSequence.h"
+#include "K4ADeviceSelector.h"
 
 
 #pragma once
@@ -21,6 +20,9 @@ public:
 	void on_frame();
 	bool is_running();
 	void on_resize();
+
+	void capture();
+	void run_colmap();
 
 private:
 	bool init_window_and_device();
@@ -37,6 +39,12 @@ private:
 	void render();
 
 	void render_capture_menu();
+	void render_debug();
+	void render_console();
+	void render_content();
+	void render_menu();
+
+	
 
 private:
 	std::string m_window_title = DEFAULT_WINDOW_TITLE;
@@ -44,12 +52,16 @@ private:
 	int m_window_height = DEFAULT_WINDOW_H;
 	bool m_is_minimized = false;
 
-	AppState m_app_state = AppState::Capture;
-	Camera m_camera;
+	AppState m_app_state = AppState::Default;
+
 	PointcloudRenderer m_renderer;
 	CameraCaptureSequence m_capture_sequence;
 
 	GLFWwindow* m_window = nullptr;
+
+	Camera m_camera;
+	K4ADeviceSelector m_k4a_device_selector;
+	
 
 	wgpu::Device m_device = nullptr;
 	wgpu::Surface m_surface = nullptr;

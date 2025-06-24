@@ -12,16 +12,26 @@
 
 #define DEFAULT_WINDOW_TITLE "DepthSplat"
 
-#define DEFAULT_WINDOW_W 1920
-#define DEFAULT_WINDOW_H 1080
+#define FPS 165.f
 
-#define GUI_MENU_WIDTH 500.f
+#define DEFAULT_WINDOW_W 1280
+#define DEFAULT_WINDOW_H 720
+
+#define GUI_MENU_WIDTH 800.f
 #define GUI_CAPTURELIST_HEIGHT 500.f
 #define GUI_CAPTURELIST_INDENT 20.f
 #define GUI_CONSOLE_HEIGHT 300.f
 
+#define POINTCLOUD_CAMERA_PLANE_NEAR .01f
+#define POINTCLOUD_CAMERA_PLANE_FAR 10000.f
+#define POINTCLOUD_MAX_NUM 5
+
 #define POINTCLOUD_COLOR_RESOLUTION K4A_COLOR_RESOLUTION_1080P
 #define POINTCLOUD_DEPTH_MODE K4A_DEPTH_MODE_WFOV_2X2BINNED
+
+#define CAMERA_IMU_CALIBRATION_SAMPLE_COUNT 100
+#define CAMERA_IMU_CALIBRATION_SAMPLE_DELAY_MS 10
+#define CAMERA_IMU_CALIBRATION_GRAVITY -9.81066f
 
 #define SWAPCHAIN_FORMAT wgpu::TextureFormat::BGRA8Unorm
 #define DEPTHTEXTURE_FORMAT wgpu::TextureFormat::Depth24Plus
@@ -31,7 +41,7 @@
 enum class AppState {
 	Default,
 	Capture,
-	Edit
+	Pointcloud
 };
 
 struct BgraPixel {
@@ -53,23 +63,23 @@ struct Point3D {
 
 namespace Uniforms {
 	struct RenderUniforms {
-		glm::mat4 projectionMatrix;
-		glm::mat4 viewMatrix;
-		glm::mat4 modelMatrix;
+		glm::mat4 projection_mat;
+		glm::mat4 view_mat;
+		glm::mat4 model_mat;
+		float point_size;
+		float pad[3];
 	};
 	static_assert(sizeof(RenderUniforms) % 16 == 0);
 }
 
-struct VertexAttributes {
+struct PointAttributes {
 	glm::vec3 position;
-	glm::vec3 normal;
 	glm::vec3 color;
-	glm::vec2 uv;
 };
 
 struct CameraState {
 	glm::vec2 angles = { .8f, .5f };
-	float zoom = -7.f;
+	float zoom = -5.f;
 	
 
 	glm::vec3 get_camera_position() {
