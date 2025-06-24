@@ -26,7 +26,7 @@ public:
 	inline static bool s_updated = false;
 };
 
-class Util {
+class Helper {
 public:
 	inline static glm::vec3 quat_to_euler_degrees(const glm::quat& q)
 	{

@@ -5,8 +5,11 @@
 #include <cstdlib>
 
 #include "utils/k4aimguiextensions.h"
+#include <imgui.h>
 #include <backends/imgui_impl_wgpu.h>
 #include <backends/imgui_impl_glfw.h>
+
+#include "utils/imfilebrowser.h"
 
 #include <glm/glm.hpp>
 #include <glm/ext.hpp>
@@ -14,7 +17,7 @@
 #include "utils/glfw3webgpu.h"
 #include "ResourceManager.h"
 #include "Pointcloud.h"
-#include "Utils.h"
+#include "Helpers.h"
 #include "Darkmode.h"
 
 Application::Application()
@@ -32,7 +35,7 @@ bool Application::on_init()
 	if (!init_gui())
 		return false;
 
-	if (!m_capture_sequence.on_init(m_camera.color_texture_ptr(), m_camera.depth_image(), m_camera.calibration(), m_camera.device()))
+	if (!m_capture_sequence.on_init())
 		return false;
 	
 	if(!m_renderer.on_init(m_device, m_queue, m_window_width - GUI_MENU_WIDTH, m_window_height - GUI_CONSOLE_HEIGHT))
@@ -124,6 +127,7 @@ void Application::capture()
 	capture->is_selected = false;
 	capture->calibration = m_camera.calibration();
 	capture->depth_image = k4a::image(*m_camera.depth_image());
+	capture->color_image = k4a::image(*m_camera.color_image());
 	capture->transform = glm::mat4(1.f);
 	capture->camera_orientation = glm::quat(m_camera.orientation());
 	m_capture_sequence.add_capture(capture);
@@ -134,16 +138,45 @@ void Application::run_colmap()
 {
 	std::string colmap_bin_path = TOOLS_DIR "/colmap-x64-windows-nocuda/COLMAP.bat";
 	std::string db_path = OUTPUT_DIR "/database.db"; // TODO: delete database.db if it already exists (from previous reconstruction)
+	if (std::filesystem::exists(db_path)) {
+		Logger::log("database.db already exists. Removing...");
+		std::filesystem::remove(db_path);
+	}
+
+
 	std::string image_path = OUTPUT_DIR "/images";
 	std::string sparse_path = OUTPUT_DIR "/sparse"; // TODO: create folder, if it doesn't exist
+	if (!std::filesystem::exists(sparse_path)) {
+		Logger::log("/output/sparse/ does not exist. Creating...");
+		std::filesystem::create_directories(sparse_path);
+	}
+	else {
+		for (const auto& file : std::filesystem::directory_iterator(sparse_path)) {
+			std::filesystem::remove_all(file.path());
+		}
+	}
+
+	std::string model_path = OUTPUT_DIR "/model_txt";
+	if (!std::filesystem::exists(model_path)) {
+		Logger::log("/output/model_txt/ does not exist. Creating...");
+		std::filesystem::create_directories(model_path);
+	}
+	else {
+		for (const auto& file : std::filesystem::directory_iterator(model_path)) {
+			std::filesystem::remove_all(file.path());
+		}
+	}
+
 
 	std::string cmd_feature_extraction = std::format("\"\"{}\" feature_extractor --database_path \"{}\" --image_path \"{}\"\"", colmap_bin_path, db_path, image_path);
 	std::string cmd_feature_matching = std::format("\"\"{}\" exhaustive_matcher --database_path \"{}\"\"", colmap_bin_path, db_path);
 	std::string cmd_sfm_mapping = std::format("\"\"{}\" mapper --database_path \"{}\" --image_path \"{}\" --output_path \"{}\"\"", colmap_bin_path, db_path, image_path, sparse_path);
+	std::string cmd_model_converter = std::format("\"\"{}\" model_converter --input_path \"{}/0\" --output_path \"{}\" --output_type TXT\"", colmap_bin_path, sparse_path, model_path);
 
 	std::system(cmd_feature_extraction.c_str());
 	std::system(cmd_feature_matching.c_str());
 	std::system(cmd_sfm_mapping.c_str());
+	std::system(cmd_model_converter.c_str());
 	/*std::cout 
 		<< cmd_feature_extraction << std::endl 
 		<< cmd_feature_matching << std::endl
@@ -443,12 +476,12 @@ void Application::render_capture_menu()
 
 		if (ImGui::TreeNodeEx(std::format("Capture \"{}\"", capture->name).c_str(), ImGuiTreeNodeFlags_SpanAvailWidth)) {
 			ImGui::Separator();
-			if (ImGui::Checkbox("Select", &capture->is_selected)) {
+			if (!capture->is_colmap && ImGui::Checkbox("Select", &capture->is_selected)) {
 				if (capture->is_selected) {
 					if (m_renderer.get_num_pointclouds() < POINTCLOUD_MAX_NUM) {
 						auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
-						pc->set_color(Util::get_pc_color_by_index(i));
-						pc->load_from_capture(capture->depth_image, capture->calibration, m_camera.orientation());
+						pc->set_color(Helper::get_pc_color_by_index(i));
+						pc->load_from_capture(capture->depth_image, capture->color_image, capture->calibration, m_camera.orientation());
 						capture->data_pointer = m_renderer.add_pointcloud(pc);
 						capture->is_selected = true;
 					}
@@ -469,17 +502,23 @@ void Application::render_capture_menu()
 				glm::quat rotation_rad;
 				glm::decompose(capture->transform, scale, rotation_rad, translation, skew, perspective);
 
-				glm::vec3 rotation_deg = Util::quat_to_euler_degrees(rotation_rad);
+				glm::vec3 rotation_deg = Helper::quat_to_euler_degrees(rotation_rad);
 
 				ImGui::SliderFloat3("Position", &translation.x, -10.f, 10.f);
 				ImGui::SliderFloat3("Rotation", &rotation_deg.x, -180.f, 180.f);
-				ImGui::SliderFloat("Scale", &scale.x, .1f, 5.f);
+				ImGui::SliderFloat("Scale", &scale.x, .1f, 100.f);
+
+				
 
 				glm::mat4 new_transform = glm::translate(glm::mat4(1.f), translation) *
-					glm::toMat4(Util::euler_degrees_to_quat(rotation_deg)) *
+					glm::toMat4(Helper::euler_degrees_to_quat(rotation_deg)) *
 					glm::scale(glm::mat4(1.f), glm::vec3(scale.x));
 
 				capture->transform = new_transform;
+
+				if (ImGui::Button("Reset")) {
+					capture->transform = glm::mat4(1.f);
+				}
 			}
 
 			ImGui::TreePop();
@@ -528,8 +567,6 @@ void Application::render_capture_menu()
 			m_camera.calibrate_sensors();
 		}
 
-
-
 		{
 			if (m_capture_sequence.captures().size() < 1)
 				ImGui::BeginDisabled();
@@ -541,16 +578,18 @@ void Application::render_capture_menu()
 				// run colmap on saved images
 				run_colmap();
 				
-				//
+				
 				CameraCapture* capture = new CameraCapture();
 				capture->name = "COLMAP Pointcloud";
 				capture->is_selected = true;
+				capture->is_colmap = true;
 				capture->transform = glm::mat4(1.f);
 				capture->camera_orientation = glm::quat();
 				m_capture_sequence.add_capture(capture);
 				CameraCaptureSequence::s_capturelist_updated = true;
 
 				auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
+				pc->set_is_colmap(true);
 				pc->load_from_points3D(OUTPUT_DIR "/sparse/0/points3D.bin");
 				m_renderer.add_pointcloud(pc);
 
@@ -600,26 +639,7 @@ void Application::render_capture_menu()
 				pc->load_from_ply(RESOURCE_DIR "/depth_point_cloud.ply", initial_transform);
 				m_renderer.add_pointcloud(pc);
 			}
-
 		}
-
-		/*if (ImGui::Button("Run COLMAP")) {
-			run_colmap();
-		}
-
-		if (ImGui::Button("Load COLMAP data")) {
-			CameraCapture* capture = new CameraCapture();
-			capture->name = "COLMAP Pointcloud";
-			capture->is_selected = true;
-			capture->transform = glm::mat4(1.f);
-			capture->camera_orientation = glm::quat();
-			m_capture_sequence.add_capture(capture);
-			CameraCaptureSequence::s_capturelist_updated = true;
-
-			auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
-			pc->load_from_points3D(OUTPUT_DIR "/sparse/0/points3D.bin");
-			m_renderer.add_pointcloud(pc);
-		}*/
 
 		ImGui::Separator();
 		ImGui::Text("ICP settings");
@@ -647,7 +667,7 @@ void Application::render_debug()
 	ImGui::Text("Number of points: %d", m_renderer.get_num_vertices());
 	//ImGui::TextUnformatted(std::format("Delta transform: \n{}", Util::mat4_to_string(m_camera.delta_transform())).c_str());
 	
-	glm::vec3 scale, translation, skew;
+	/*glm::vec3 scale, translation, skew;
 	glm::vec4 perspective;
 	glm::quat rotation_rad;
 	glm::decompose(m_camera.delta_transform(), scale, rotation_rad, translation, skew, perspective);
@@ -655,7 +675,13 @@ void Application::render_debug()
 	glm::vec3 rotation_deg = Util::quat_to_euler_degrees(rotation_rad);
 	ImGui::Text(std::format("{}", rotation_deg.x).c_str());
 	ImGui::Text(std::format("{}", rotation_deg.y).c_str());
-	ImGui::Text(std::format("{}", rotation_deg.z).c_str());
+	ImGui::Text(std::format("{}", rotation_deg.z).c_str());*/
+	if (ImGui::Button("Reload Shader")) {
+		m_renderer.reload_renderpipeline();
+	}
+
+	ImGui::SliderFloat("Point size", &m_renderer.uniforms().point_size, .01f, 1.f);
+	
 
 	ImGui::End();
 }
@@ -775,7 +801,6 @@ void Application::render_menu()
 		ImGui::PopStyleColor();
 
 	ImGui::PopStyleVar();
-
 
 	ImGui::Separator();
 	ImGui::NewLine();

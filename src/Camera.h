@@ -20,6 +20,7 @@ public:
 
 	Texture* color_texture_ptr();
 	k4a::image* depth_image();
+	k4a::image* color_image();
 	k4a::calibration calibration();
 
 	inline k4a::device* device() {
@@ -53,6 +54,7 @@ private:
 	wgpu::Buffer m_depthbuffer = NULL;
 	Texture m_color_texture;
 	k4a::image m_depth_image;
+	k4a::image m_color_image;
 	k4a::calibration m_calibration;
 	glm::mat4 m_delta_transform = glm::mat4(1.f);
 	glm::quat m_orientation = glm::quat(1, 0, 0, 0);

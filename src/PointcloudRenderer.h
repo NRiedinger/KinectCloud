@@ -3,7 +3,7 @@
 
 #include "Structs.h"
 #include "Pointcloud.h"
-#include "Utils.h"
+#include "Helpers.h"
 
 #include <imgui.h>
 
@@ -30,6 +30,9 @@ public:
 	float get_futhest_point();
 
 	void align_pointclouds(int max_iter, float max_corr_dist);
+	void reload_renderpipeline();
+
+	Uniforms::RenderUniforms& uniforms();
 
 private:
 	bool init_rendertarget();
@@ -40,7 +43,7 @@ private:
 
 	bool init_renderpipeline();
 	void terminate_renderpipeline();
-
+	
 	bool init_uniforms();
 	void terminate_uniforms();
 
@@ -53,10 +56,12 @@ private:
 	void handle_pointcloud_mouse_events();
 
 	
+
+	
 	
 	void draw_gizmos() {
 		static auto project = [this](glm::vec3 p) -> ImVec2 {
-			auto screen_pos = Util::project_point(m_renderuniforms.projection_mat, m_renderuniforms.view_mat, p, (float)m_width, (float)m_height);
+			auto screen_pos = Helper::project_point(m_renderuniforms.projection_mat, m_renderuniforms.view_mat, p, (float)m_width, (float)m_height);
 			return { GUI_MENU_WIDTH + screen_pos.x, screen_pos.y };
 		};
 

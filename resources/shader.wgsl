@@ -31,19 +31,18 @@ const quadPos = array(
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
 	var out: VertexOutput;
-
   let viewPos = uniforms.viewMatrix * transformation * vec4f(in.position, 1.0);
+
   var scale: f32;
   if(viewPos.z >= 0.0){
-    scale = 0.25;
+    scale = uniforms.pointSize;
   } else {
-    let depth = -viewPos.z;
-    scale = uniforms.pointSize / depth;
+    scale = 0.0;
   }
 
   let pos = (quadPos[in.vertexIdx] - 0.5) * scale;
-  out.position = uniforms.projectionMatrix * viewPos + vec4f(pos, 0, 0);
-	out.color = in.color;
+  out.position = uniforms.projectionMatrix * (viewPos + vec4f(pos, 0, 0));
+  out.color = in.color;
 	
 	return out;
 }

@@ -75,6 +75,7 @@ Pointcloud* PointcloudRenderer::add_pointcloud(Pointcloud* pc) {
 	return pc;
 }
 
+
 void PointcloudRenderer::remove_pointcloud(Pointcloud* ptr_to_remove)
 {
 	m_pointclouds.erase(
@@ -197,7 +198,7 @@ void PointcloudRenderer::align_pointclouds(int max_iter, float max_corr_dist)
 
 		// Transformation ausgeben
 		auto transform = eigen_to_glm(icp.getFinalTransformation());
-		Logger::log(std::format("Transformationmatrix:\n{}", Util::mat4_to_string(transform)));
+		Logger::log(std::format("Transformationmatrix:\n{}", Helper::mat4_to_string(transform)));
 
 		m_pointclouds[i]->set_transform(transform);
 	}
@@ -365,7 +366,7 @@ bool PointcloudRenderer::init_uniforms()
 
 	// initial uniform values
 	m_renderuniforms.model_mat = glm::scale(glm::mat4(1.0), glm::vec3(1.0));
-	m_renderuniforms.point_size = 50.f;
+	m_renderuniforms.point_size = .1f;
 	m_queue.writeBuffer(m_renderuniform_buffer, 0, &m_renderuniforms, sizeof(Uniforms::RenderUniforms));
 
 	update_viewmatrix();
@@ -518,6 +519,16 @@ void PointcloudRenderer::handle_pointcloud_mouse_events()
 	}
 }
 
+void PointcloudRenderer::reload_renderpipeline()
+{
+	terminate_renderpipeline();
+	init_renderpipeline();
+}
+
+Uniforms::RenderUniforms& PointcloudRenderer::uniforms()
+{
+	return m_renderuniforms;
+}
 
 
 void PointcloudRenderer::on_frame()
@@ -561,10 +572,14 @@ void PointcloudRenderer::on_frame()
 
 	wgpu::RenderPassEncoder passEncoder = encoder.beginRenderPass(renderpass_desc);
 
+	m_queue.writeBuffer(m_renderuniform_buffer, offsetof(Uniforms::RenderUniforms, point_size), &m_renderuniforms.point_size, sizeof(Uniforms::RenderUniforms::point_size));
+
+	// render each pointcloud
 	int i = 0;
 	for (auto pc : m_pointclouds) {
 
-		glm::mat4 model = glm::scale(*pc->get_transform_ptr(), glm::vec3(100.f / get_futhest_point()));
+		// glm::mat4 model = glm::scale(*pc->get_transform_ptr(), glm::vec3(100.f / get_futhest_point()));
+		glm::mat4 model = glm::scale(*pc->get_transform_ptr(), glm::vec3(1.f));
 		glm::quat cam_orienation = pc->camera_orienation();
 
 		glm::vec3 world_up = glm::vec3(0.f, 0.f, 1.f);

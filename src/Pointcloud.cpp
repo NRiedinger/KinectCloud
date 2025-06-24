@@ -1,7 +1,7 @@
 #include "Pointcloud.h"
 
 #include "ResourceManager.h"
-#include "Utils.h"
+#include "Helpers.h"
 
 #include <imgui.h>
 #include <glm/glm.hpp>
@@ -36,9 +36,10 @@ Pointcloud::~Pointcloud()
 	m_points.clear();
 }
 
-void Pointcloud::load_from_capture(k4a::image depth_image, k4a::calibration calibration, glm::quat cam_orientation)
+void Pointcloud::load_from_capture(k4a::image depth_image, k4a::image color_image, k4a::calibration calibration, glm::quat cam_orientation)
 {
 	m_depth_image = depth_image;
+	m_color_image = color_image;
 	m_calibration = calibration;
 	m_cam_orientation = cam_orientation;
 
@@ -149,7 +150,7 @@ void Pointcloud::load_from_points3D(const std::filesystem::path path)
 		PointAttributes point;
 
 		point.position = { x, y, z };
-		point.color = { rgb[0], rgb[1], rgb[2] };
+		point.color = { rgb[0] / 255.f, rgb[1] / 255.f, rgb[2] / 255.f };
 
 		m_points.push_back(point);
 
@@ -169,11 +170,19 @@ void Pointcloud::capture_point_cloud()
 		Logger::log("Tried to capture empty depth image.", LoggingSeverity::Error);
 		return;
 	}
+
+	k4a::image transformed_color_image = k4a::image::create(K4A_IMAGE_FORMAT_COLOR_BGRA32,
+															m_calibration.depth_camera_calibration.resolution_width,
+															m_calibration.depth_camera_calibration.resolution_height,
+															m_calibration.depth_camera_calibration.resolution_width * 4);
 	
 	k4a::image xy_table = k4a::image::create(K4A_IMAGE_FORMAT_CUSTOM,
 											 m_calibration.depth_camera_calibration.resolution_width,
 											 m_calibration.depth_camera_calibration.resolution_height,
 											 m_calibration.depth_camera_calibration.resolution_width * (int)sizeof(k4a_float2_t));
+
+	k4a::transformation transformation(m_calibration);
+	transformation.color_image_to_depth_camera(m_depth_image, m_color_image, &transformed_color_image);
 
 
 	create_xy_table(&m_calibration, xy_table);
@@ -186,8 +195,8 @@ void Pointcloud::capture_point_cloud()
 
 
 	int point_count;
-	generate_point_cloud(m_depth_image, xy_table, point_cloud, &point_count);
-	write_point_cloud_to_buffer(/*point_cloud, point_count*/);
+	generate_point_cloud(xy_table, point_cloud, transformed_color_image, &point_count);
+	write_point_cloud_to_buffer();
 }
 
 void Pointcloud::create_xy_table(const k4a::calibration* calibration, k4a::image xy_table)
@@ -218,12 +227,13 @@ void Pointcloud::create_xy_table(const k4a::calibration* calibration, k4a::image
 	}
 }
 
-void Pointcloud::generate_point_cloud(const k4a::image depth_image, const k4a::image xy_table, k4a::image point_cloud, int* point_count)
+void Pointcloud::generate_point_cloud(const k4a::image xy_table, k4a::image point_cloud, const k4a::image transformed_color_image, int* point_count)
 {
-	const int width = depth_image.get_width_pixels();
-	const int height = depth_image.get_height_pixels();
+	const int width = m_depth_image.get_width_pixels();
+	const int height = m_depth_image.get_height_pixels();
 
-	uint16_t* depth_data = (uint16_t*)depth_image.get_buffer();
+	uint16_t* depth_data = (uint16_t*)m_depth_image.get_buffer();
+	uint8_t* color_data = (uint8_t*)transformed_color_image.get_buffer();
 	k4a_float2_t* xy_table_data = (k4a_float2_t*)xy_table.get_buffer();
 	k4a_float3_t* point_cloud_data = (k4a_float3_t*)point_cloud.get_buffer();
 
@@ -250,15 +260,37 @@ void Pointcloud::generate_point_cloud(const k4a::image depth_image, const k4a::i
 	m_points.clear();
 	for (int i = 0; i < width * height; i++) {
 
+		if (std::isnan(point_cloud_data[i].xyz.x) || 
+			std::isnan(point_cloud_data[i].xyz.y) || 
+			std::isnan(point_cloud_data[i].xyz.z))
+			continue;
+
+		uint8_t b = color_data[i * 4 + 0];
+		uint8_t g = color_data[i * 4 + 1];
+		uint8_t r = color_data[i * 4 + 2];
+		uint8_t a = color_data[i * 4 + 3];
+
+		// skip points, we don't have a color for
+		// (fov of depth image is wider that the color image)
+		if (r == 0 && g == 0 && b == 0)
+			continue;
+
 		PointAttributes point;
+		static float scale = 1.f / 100.f;
 
-		point.position.x = (float)-point_cloud_data[i].xyz.x;
-		point.position.y = (float)point_cloud_data[i].xyz.z;
-		point.position.z = (float)-point_cloud_data[i].xyz.y;
+		point.position.x = (float)-point_cloud_data[i].xyz.x * scale;
+		point.position.y = (float)point_cloud_data[i].xyz.z * scale;
+		point.position.z = (float)-point_cloud_data[i].xyz.y * scale;
 
-		point.color.r = m_color.r;
+		/*point.color.r = m_color.r;
 		point.color.g = m_color.g;
-		point.color.b = m_color.b;
+		point.color.b = m_color.b;*/
+
+		
+
+		point.color.r = r / 255.f;
+		point.color.g = g / 255.f;
+		point.color.b = b / 255.f;
 
 		m_points.push_back(point);
 	}

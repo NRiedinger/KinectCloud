@@ -1,6 +1,6 @@
 #include "Camera.h"
 
-#include "Utils.h"
+#include "Helpers.h"
 #include "Structs.h"
 
 #include <glm/glm.hpp>
@@ -147,14 +147,10 @@ void Camera::on_frame()
 	
 	k4a::capture capture;
 	if (m_k4a_device.get_capture(&capture, std::chrono::milliseconds(0))) {
-		const k4a::image color_image = capture.get_color_image();
+		m_color_image = capture.get_color_image();
 		m_depth_image = capture.get_depth_image();
 
-		// TODO: move this to when pointcloud is generated, not here. Too fps hungry...
-		/*k4a::transformation transform(calibration());
-		m_depth_image = transform.depth_image_to_color_camera(capture.get_depth_image());*/
-
-		m_color_texture.update(reinterpret_cast<const BgraPixel*>(color_image.get_buffer()));
+		m_color_texture.update(reinterpret_cast<const BgraPixel*>(m_color_image.get_buffer()));
 
 		capture.reset();
 	}
@@ -290,8 +286,8 @@ void Camera::calibrate_sensors()
 	m_velocity = glm::vec3(0.f);
 
 	Logger::log("Camera calibrated.");
-	Logger::log(std::format("m_acc_noise: {}", Util::vec3_to_string(m_acc_noise)));
-	Logger::log(std::format("m_gyro_noise: {}", Util::vec3_to_string(m_gyro_noise)));
+	Logger::log(std::format("m_acc_noise: {}", Helper::vec3_to_string(m_acc_noise)));
+	Logger::log(std::format("m_gyro_noise: {}", Helper::vec3_to_string(m_gyro_noise)));
 }
 
 void Camera::draw_gizmos()
@@ -301,7 +297,7 @@ void Camera::draw_gizmos()
 
 	static auto project = [&](glm::vec3 p) -> ImVec2 {
 
-		auto screen_pos = Util::project_point(projection_mat, view_mat, p, (float)m_width, (float)m_height);
+		auto screen_pos = Helper::project_point(projection_mat, view_mat, p, (float)m_width, (float)m_height);
 
 		return { GUI_MENU_WIDTH + screen_pos.x, screen_pos.y };
 	};
@@ -333,6 +329,11 @@ Texture* Camera::color_texture_ptr()
 k4a::image* Camera::depth_image()
 {
 	return &m_depth_image;
+}
+
+k4a::image* Camera::color_image()
+{
+	return &m_color_image;
 }
 
 k4a::calibration Camera::calibration()

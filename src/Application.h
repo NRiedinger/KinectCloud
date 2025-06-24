@@ -2,8 +2,6 @@
 #include <webgpu/webgpu.hpp>
 #include <string>
 
-#include <imgui.h>
-
 #include "Structs.h"
 #include "Texture.h"
 #include "Camera.h"

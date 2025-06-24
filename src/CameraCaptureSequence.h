@@ -21,6 +21,7 @@ public:
 
 	std::string name;
 	bool is_selected;
+	bool is_colmap = false;
 	Texture* image_color_data;
 	int image_color_width;
 	int image_color_height;
@@ -28,6 +29,7 @@ public:
 	int image_depth_width;
 	int image_depth_height;
 	k4a::image depth_image;
+	k4a::image color_image;
 	k4a::calibration calibration;
 	glm::mat4 transform;
 	Pointcloud* data_pointer;
@@ -37,7 +39,7 @@ public:
 class CameraCaptureSequence
 {
 public:
-	bool on_init(Texture* color_texture_pointer, k4a::image* depth_image, k4a::calibration calibration, k4a::device* k4a_device_ptr);
+	bool on_init();
 	void on_terminate();
 	bool is_initialized();
 	void save_sequence();

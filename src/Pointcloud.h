@@ -12,7 +12,7 @@ public:
 	Pointcloud(wgpu::Device device, wgpu::Queue queue, glm::mat4* transform_ptr);
 	~Pointcloud();
 
-	void load_from_capture(k4a::image depth_image, k4a::calibration calibration, glm::quat cam_orientation);
+	void load_from_capture(k4a::image depth_image, k4a::image color_image, k4a::calibration calibration, glm::quat cam_orientation);
 	void load_from_ply(const std::filesystem::path path, glm::mat4 initial_transform);
 	void load_from_points3D(const std::filesystem::path path);
 
@@ -48,19 +48,29 @@ public:
 		m_color = color;
 	}
 
+	inline void set_is_colmap(bool is_colmap) {
+		m_is_colmap = is_colmap;
+	}
+
+	inline bool is_colmap() {
+		return m_is_colmap;
+	}
+
 private:
 	void capture_point_cloud();
 	void create_xy_table(const k4a::calibration* calibration, k4a::image xy_table);
-	void generate_point_cloud(const k4a::image depth_image, const k4a::image xy_table, k4a::image point_cloud, int* point_count);
-	void write_point_cloud_to_buffer(/*const k4a::image point_cloud, int point_count*/);
+	void generate_point_cloud(const k4a::image xy_table, k4a::image point_cloud, const k4a::image transformed_color_image, int* point_count);
+	void write_point_cloud_to_buffer();
 
 private:
 	bool m_is_initialized = false;
+	bool m_is_colmap = false;
 	glm::vec3 m_color = { 1.f, 1.f, 1.f };
 
 	wgpu::Device m_device = nullptr;
 	wgpu::Queue m_queue = nullptr;
 	k4a::image m_depth_image;
+	k4a::image m_color_image;
 	k4a::image m_transformed_depth_image;
 	k4a::calibration m_calibration;
 	glm::mat4* m_transform = nullptr;
