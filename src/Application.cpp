@@ -5,11 +5,8 @@
 #include <cstdlib>
 
 #include "utils/k4aimguiextensions.h"
-#include <imgui.h>
 #include <backends/imgui_impl_wgpu.h>
 #include <backends/imgui_impl_glfw.h>
-
-#include "utils/imfilebrowser.h"
 
 #include <glm/glm.hpp>
 #include <glm/ext.hpp>
@@ -119,11 +116,6 @@ void Application::capture()
 	std::string capture_name = std::format("{}", m_capture_sequence.captures().size());
 
 	capture->name = capture_name;
-	capture->image_color_width = m_camera.color_texture_ptr()->width();
-	capture->image_color_height = m_camera.color_texture_ptr()->height();
-	if (!m_camera.color_texture_ptr()->save_to_buffer((unsigned char**)&capture->image_color_data)) {
-		Logger::log("Failed to save color texture to capture data buffer", LoggingSeverity::Error);
-	}
 	capture->is_selected = false;
 	capture->calibration = m_camera.calibration();
 	capture->depth_image = k4a::image(*m_camera.depth_image());
@@ -378,6 +370,20 @@ bool Application::init_gui()
 		glfwSetWindowSize(m_window, w, h);
 	}
 
+	// set save/load file dialog properties
+	if (!std::filesystem::exists(CAPTURE_DIR)) {
+		std::filesystem::create_directories(CAPTURE_DIR);
+	}
+
+	m_save_dialog = ImGui::FileBrowser(ImGuiFileBrowserFlags_SelectDirectory | ImGuiFileBrowserFlags_CreateNewDir | ImGuiFileBrowserFlags_HideRegularFiles);
+	m_save_dialog.SetTitle("Select directory to save (must be empty)");
+	m_save_dialog.SetDirectory(CAPTURE_DIR);
+
+	m_load_dialog = ImGui::FileBrowser(ImGuiFileBrowserFlags_MultipleSelection);
+	m_load_dialog.SetTitle("Select captures to load");
+	m_load_dialog.SetDirectory(CAPTURE_DIR);
+	m_load_dialog.SetTypeFilters({ ".capture" });
+	
 	
 	return true;
 }
@@ -464,6 +470,52 @@ void Application::render_capture_menu()
 {
 	ImGui::Text("Camera Captures");
 
+	ImGui::SameLine();
+
+	{
+		if (ImGui::Button("Save")) {
+			m_save_dialog.Open();
+		}
+		m_save_dialog.Display();
+
+		if (m_save_dialog.HasSelected()) {
+			auto selected_path = m_save_dialog.GetSelected();
+			if (std::filesystem::is_empty(selected_path)) {
+				if (m_capture_sequence.save_sequence(selected_path)) {
+					Logger::log(std::format("Successfully saved captures to {}", selected_path.string()));
+				}
+				else {
+					Logger::log("Failed to save captures", LoggingSeverity::Error);
+				}
+			}
+			else {
+				Logger::log(std::format("Failed to save captures to {}. Directory must be empty.", selected_path.string()), LoggingSeverity::Error);
+			}
+			
+			m_save_dialog.ClearSelected();
+		}
+	}
+
+	ImGui::SameLine();
+
+	if (ImGui::Button("Load")) {
+		m_load_dialog.Open();
+	}
+
+	m_load_dialog.Display();
+
+	if (m_load_dialog.HasSelected()) {
+		auto paths = m_load_dialog.GetMultiSelected();
+		if (m_capture_sequence.load_sequence(paths)) {
+			Logger::log("Successfully loaded captures");
+		}
+		else {
+			Logger::log("Failed to load captures", LoggingSeverity::Error);
+		}
+
+		m_load_dialog.ClearSelected();
+	}
+
 	ImGui::Separator();
 
 	ImGui::BeginChild("Captures Scrollable", { 0, GUI_CAPTURELIST_HEIGHT }, NULL, ImGuiWindowFlags_AlwaysVerticalScrollbar);
@@ -481,7 +533,7 @@ void Application::render_capture_menu()
 					if (m_renderer.get_num_pointclouds() < POINTCLOUD_MAX_NUM) {
 						auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
 						pc->set_color(Helper::get_pc_color_by_index(i));
-						pc->load_from_capture(capture->depth_image, capture->color_image, capture->calibration, m_camera.orientation());
+						pc->load_from_capture(capture->depth_image, capture->color_image, capture->calibration, capture->camera_orientation);
 						capture->data_pointer = m_renderer.add_pointcloud(pc);
 						capture->is_selected = true;
 					}
@@ -573,11 +625,10 @@ void Application::render_capture_menu()
 
 			if (ImGui::Button("Generate Pointcloud")) {
 				// save all captured images to /output/images
-				m_capture_sequence.save_sequence();
+				m_capture_sequence.save_for_colmap();
 
 				// run colmap on saved images
 				run_colmap();
-				
 				
 				CameraCapture* capture = new CameraCapture();
 				capture->name = "COLMAP Pointcloud";
@@ -660,28 +711,29 @@ void Application::render_debug()
 	ImGui::SetWindowPos({ 0, m_window_height - GUI_CONSOLE_HEIGHT });
 	ImGui::SetWindowSize({ GUI_MENU_WIDTH, GUI_CONSOLE_HEIGHT });
 
-	auto io = ImGui::GetIO();
-	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
-	ImGui::Text("Number of captures: %d", m_capture_sequence.captures().size());
-	ImGui::Text("Number of pointclouds: %d", m_renderer.get_num_pointclouds());
-	ImGui::Text("Number of points: %d", m_renderer.get_num_vertices());
-	//ImGui::TextUnformatted(std::format("Delta transform: \n{}", Util::mat4_to_string(m_camera.delta_transform())).c_str());
-	
-	/*glm::vec3 scale, translation, skew;
-	glm::vec4 perspective;
-	glm::quat rotation_rad;
-	glm::decompose(m_camera.delta_transform(), scale, rotation_rad, translation, skew, perspective);
+	if (m_app_state == AppState::Pointcloud) {
+		auto io = ImGui::GetIO();
+		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+		ImGui::Text("Number of captures: %d", m_capture_sequence.captures().size());
+		ImGui::Text("Number of pointclouds: %d", m_renderer.get_num_pointclouds());
+		ImGui::Text("Number of points: %d", m_renderer.get_num_vertices());
+		//ImGui::TextUnformatted(std::format("Delta transform: \n{}", Util::mat4_to_string(m_camera.delta_transform())).c_str());
 
-	glm::vec3 rotation_deg = Util::quat_to_euler_degrees(rotation_rad);
-	ImGui::Text(std::format("{}", rotation_deg.x).c_str());
-	ImGui::Text(std::format("{}", rotation_deg.y).c_str());
-	ImGui::Text(std::format("{}", rotation_deg.z).c_str());*/
-	if (ImGui::Button("Reload Shader")) {
-		m_renderer.reload_renderpipeline();
+		/*glm::vec3 scale, translation, skew;
+		glm::vec4 perspective;
+		glm::quat rotation_rad;
+		glm::decompose(m_camera.delta_transform(), scale, rotation_rad, translation, skew, perspective);
+
+		glm::vec3 rotation_deg = Util::quat_to_euler_degrees(rotation_rad);
+		ImGui::Text(std::format("{}", rotation_deg.x).c_str());
+		ImGui::Text(std::format("{}", rotation_deg.y).c_str());
+		ImGui::Text(std::format("{}", rotation_deg.z).c_str());*/
+		if (ImGui::Button("Reload Shader")) {
+			m_renderer.reload_renderpipeline();
+		}
+
+		ImGui::SliderFloat("Point size", &m_renderer.uniforms().point_size, .01f, 1.f);
 	}
-
-	ImGui::SliderFloat("Point size", &m_renderer.uniforms().point_size, .01f, 1.f);
-	
 
 	ImGui::End();
 }

@@ -107,10 +107,12 @@ if(DEV_MODE)
 	target_compile_definitions(App PRIVATE RESOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/resources")
 	target_compile_definitions(App PRIVATE OUTPUT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/output")
 	target_compile_definitions(App PRIVATE TOOLS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tools")
+	target_compile_definitions(App PRIVATE CAPTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/captures")
 else()
 	target_compile_definitions(App PRIVATE RESOURCE_DIR="./resources")
 	target_compile_definitions(App PRIVATE OUTPUT_DIR="./output")
 	target_compile_definitions(App PRIVATE TOOLS_DIR="./tools")
+	target_compile_definitions(App PRIVATE CAPTURE_DIR="./captures")
 endif()
 
 

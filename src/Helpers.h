@@ -96,6 +96,29 @@ public:
 				return glm::vec3(1.f, 1.f, 1.f);
 		}
 	}
+
+	template<typename T>
+	inline static void write_binary(std::ofstream& ofs, const T& value) {
+		ofs.write(reinterpret_cast<const char*>(&value), sizeof(T));
+	}
+
+	template<typename T>
+	inline static void read_binary(std::ifstream& ifs, T& value) {
+		ifs.read(reinterpret_cast<char*>(&value), sizeof(T));
+	}
+
+	inline static void write_string(std::ofstream& ofs, const std::string& str) {
+		uint32_t length = str.length();
+		write_binary(ofs, length);
+		ofs.write(str.c_str(), length);
+	}
+
+	inline static void read_string(std::ifstream& ifs, std::string& str) {
+		uint32_t length;
+		read_binary(ifs, length);
+		str.resize(length);
+		ifs.read(&str[0], length);
+	}
 };
 
 

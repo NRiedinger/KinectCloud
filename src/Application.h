@@ -2,6 +2,9 @@
 #include <webgpu/webgpu.hpp>
 #include <string>
 
+#include <imgui.h>
+#include "utils/imfilebrowser.h"
+
 #include "Structs.h"
 #include "Texture.h"
 #include "Camera.h"
@@ -62,6 +65,9 @@ private:
 	Camera m_camera;
 	K4ADeviceSelector m_k4a_device_selector;
 	
+	// ImGui file dialogs
+	ImGui::FileBrowser m_save_dialog;
+	ImGui::FileBrowser m_load_dialog;
 
 	wgpu::Device m_device = nullptr;
 	wgpu::Surface m_surface = nullptr;

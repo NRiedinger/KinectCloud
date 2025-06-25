@@ -35,7 +35,7 @@ bool CameraCaptureSequence::is_initialized()
 }
 
 
-void CameraCaptureSequence::save_sequence()
+void CameraCaptureSequence::save_for_colmap()
 {
 	std::filesystem::path images_dir_path = OUTPUT_DIR "/images";
 	if (!std::filesystem::exists(images_dir_path)) {
@@ -53,13 +53,14 @@ void CameraCaptureSequence::save_sequence()
 	int i = 0;
 	for (auto& capture : m_captures) {
 		std::string path = std::format("{}/{}.png", images_dir_path.string(), capture->name);
+
 		bool success = !!stbi_write_png(
 			path.c_str(),
-			capture->image_color_width,
-			capture->image_color_height,
+			capture->color_image.get_width_pixels(),
+			capture->color_image.get_height_pixels(),
 			4,
-			(void*)capture->image_color_data,
-			4 * capture->image_color_width
+			(void*)capture->color_image.get_buffer(),
+			4 * capture->color_image.get_width_pixels()
 		);
 
 		if (!success) {
@@ -76,19 +77,6 @@ void CameraCaptureSequence::save_sequence()
 }
 
 
-
-std::vector<std::string> CameraCaptureSequence::get_captures_names()
-{
-    std::vector<std::string> result;
-    result.resize(m_captures.size());
-
-    std::transform(m_captures.begin(), m_captures.end(), result.begin(), [](CameraCapture* capture) {
-		return std::format("{} [{}]", capture->name, (void*)capture->image_color_data);
-    });
-
-    return result;
-}
-
 std::vector<CameraCapture*>& CameraCaptureSequence::captures()
 {
 	return m_captures;
@@ -97,5 +85,119 @@ std::vector<CameraCapture*>& CameraCaptureSequence::captures()
 void CameraCaptureSequence::add_capture(CameraCapture* capture)
 {
 	m_captures.push_back(capture);
+}
+
+bool CameraCaptureSequence::save_sequence(const std::filesystem::path path)
+{
+	for (auto const &capture : m_captures) {
+		if (capture->is_colmap) {
+			continue;
+		}
+
+		std::filesystem::path file_path = std::format("{}/{}.capture", path.string(), capture->name);
+
+		std::ofstream ofs(file_path, std::ios::binary);
+		if (!ofs) {
+			return false;
+		}
+
+
+		Helper::write_string(ofs, capture->name);
+		Helper::write_binary(ofs, capture->is_selected);
+
+		// depth image
+		int depth_width = capture->depth_image.get_width_pixels();
+		int depth_height = capture->depth_image.get_height_pixels();
+		int depth_size = capture->depth_image.get_size();
+		Helper::write_binary(ofs, depth_width);
+		Helper::write_binary(ofs, depth_height);
+		Helper::write_binary(ofs, depth_size);
+		ofs.write(reinterpret_cast<const char*>(capture->depth_image.get_buffer()), depth_size);
+
+		// color image
+		int color_width = capture->color_image.get_width_pixels();
+		int color_height = capture->color_image.get_height_pixels();
+		int color_size = capture->color_image.get_size();
+		Helper::write_binary(ofs, color_width);
+		Helper::write_binary(ofs, color_height);
+		Helper::write_binary(ofs, color_size);
+		ofs.write(reinterpret_cast<const char*>(capture->color_image.get_buffer()), color_size);
+
+		k4a_calibration_t calibration = capture->calibration;
+		Helper::write_binary(ofs, calibration);
+
+		Helper::write_binary(ofs, capture->transform);
+
+		Helper::write_binary(ofs, capture->camera_orientation);
+
+		ofs.close();
+	}
+
+	return true;
+}
+
+bool CameraCaptureSequence::load_sequence(const std::vector<std::filesystem::path> paths)
+{
+	for (auto const& path : paths) {
+		std::ifstream ifs(path, std::ios::binary);
+		if (!ifs) {
+			return false;
+		}
+
+		CameraCapture* capture = new CameraCapture();
+
+		Helper::read_string(ifs, capture->name);
+		Helper::read_binary(ifs, capture->is_selected);
+		capture->is_colmap = false;
+
+		// depth image
+		int depth_width;
+		int depth_height;
+		int depth_size;
+		Helper::read_binary(ifs, depth_width);
+		Helper::read_binary(ifs, depth_height);
+		Helper::read_binary(ifs, depth_size);
+		std::vector<uint8_t> depth_buffer(depth_size);
+		ifs.read(reinterpret_cast<char*>(depth_buffer.data()), depth_size);
+		capture->depth_image = k4a::image::create(
+			K4A_IMAGE_FORMAT_DEPTH16,
+			depth_width,
+			depth_height,
+			depth_width * sizeof(uint16_t)
+		);
+		memcpy(capture->depth_image.get_buffer(), depth_buffer.data(), depth_buffer.size());
+
+		// color image
+		int color_width;
+		int color_height;
+		int color_size;
+		Helper::read_binary(ifs, color_width);
+		Helper::read_binary(ifs, color_height);
+		Helper::read_binary(ifs, color_size);
+		std::vector<uint8_t> color_buffer(color_size);
+		ifs.read(reinterpret_cast<char*>(color_buffer.data()), color_size);
+		capture->color_image = k4a::image::create(
+			K4A_IMAGE_FORMAT_COLOR_BGRA32,
+			color_width,
+			color_height,
+			color_width * 4
+		);
+		memcpy(capture->color_image.get_buffer(), color_buffer.data(), color_buffer.size());
+
+		k4a_calibration_t calibration;
+		Helper::read_binary(ifs, calibration);
+		capture->calibration = k4a::calibration(calibration);
+
+		Helper::read_binary(ifs, capture->transform);
+		Helper::read_binary(ifs, capture->camera_orientation);
+
+		capture->data_pointer = nullptr;
+
+		ifs.close();
+
+		add_capture(capture);
+	}
+	
+	return true;
 }
 
