@@ -18,6 +18,7 @@ struct Uniforms_t {
 };
 @group(0) @binding(0) var<uniform> uniforms: Uniforms_t;
 @group(0) @binding(1) var<uniform> transformation: mat4x4f;
+@group(0) @binding(2) var<uniform> opacity: f32;
 
 const quadPos = array(
   vec2f(0, 0),
@@ -51,5 +52,5 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
-	return vec4f(in.color, 1.0);
+	return vec4f(in.color, opacity);
 }

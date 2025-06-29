@@ -33,9 +33,11 @@ public:
 	bool on_init();
 	void on_terminate();
 	bool is_initialized();
+	std::vector<std::string> get_capturenames();
 	void save_images(std::filesystem::path path, bool only_selected = false);
 	void save_cameras_extrinsics(std::filesystem::path path);
 	std::vector<CameraCapture*>& captures();
+	CameraCapture* capture_at_idx(int idx);
 	void add_capture(CameraCapture* capture);
 	bool save_sequence(const std::filesystem::path path);
 	bool load_sequence(const std::vector<std::filesystem::path> paths);

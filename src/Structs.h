@@ -21,6 +21,8 @@
 #define GUI_CAPTURELIST_HEIGHT 500.f
 #define GUI_CAPTURELIST_INDENT 20.f
 #define GUI_CONSOLE_HEIGHT 300.f
+#define GUI_MENU_EDIT_WIDTH 400.f
+#define GUI_MENU_EDIT_HEIGHT 300.f
 
 #define POINTCLOUD_CAMERA_PLANE_NEAR .01f
 #define POINTCLOUD_CAMERA_PLANE_FAR 10000.f
@@ -106,13 +108,3 @@ struct DragState {
 	const float INERTIA = .9f;
 };
 
-
-struct Gaussian
-{
-	glm::vec3 mean;
-	glm::vec3 logScale;
-	float opacity;
-	glm::quat rotation;
-	glm::vec3 shDiffColor;
-	std::vector<float> shCoeffsRest;
-};

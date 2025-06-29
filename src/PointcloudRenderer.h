@@ -24,12 +24,13 @@ public:
 
 	Pointcloud* add_pointcloud(Pointcloud* pc);
 	void remove_pointcloud(Pointcloud* pointer);
+	void set_selected(Pointcloud* i);
 	void clear_pointclouds();
 	size_t get_num_pointclouds();
 	int get_num_vertices();
 	float get_futhest_point();
-
-	void align_pointclouds(int max_iter, float max_corr_dist);
+	
+	void align_pointclouds(int max_iter, float max_corr_dist, Pointcloud* source, Pointcloud* target);
 	void reload_renderpipeline();
 
 	void write_points3D(std::filesystem::path path);
@@ -57,10 +58,6 @@ private:
 	void update_viewmatrix();
 	void handle_pointcloud_mouse_events();
 
-	
-
-	
-	
 	void draw_gizmos() {
 		static auto project = [this](glm::vec3 p) -> ImVec2 {
 			auto screen_pos = Helper::project_point(m_renderuniforms.projection_mat, m_renderuniforms.view_mat, p, (float)m_width, (float)m_height);
@@ -76,6 +73,7 @@ private:
 
 private:
 	std::vector<Pointcloud*> m_pointclouds;
+	Pointcloud* m_selected_pointcloud = nullptr;
 
 	bool m_initialized = false;
 	int m_width;
@@ -88,6 +86,7 @@ private:
 	Uniforms::RenderUniforms m_renderuniforms;
 	wgpu::Buffer m_renderuniform_buffer;
 	wgpu::Buffer m_transform_buffer;
+	wgpu::Buffer m_opacity_buffer;
 
 	// bind group
 	wgpu::BindGroup m_bindgroup = nullptr;

@@ -155,7 +155,7 @@ void Camera::on_frame()
 
 	update_movement();
 
-	ImGui::Begin("Camera Capture Window", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
+	ImGui::Begin("Camera Capture Window", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoBringToFrontOnFocus);
 	ImGui::SetWindowPos({ GUI_MENU_WIDTH, 0.f });
 	ImGui::SetWindowSize({ (float)m_width, (float)m_height });
 

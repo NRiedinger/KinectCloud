@@ -120,8 +120,16 @@ float PointcloudRenderer::get_futhest_point()
 	return value;
 }
 
-void PointcloudRenderer::align_pointclouds(int max_iter, float max_corr_dist)
+void PointcloudRenderer::set_selected(Pointcloud* pc)
 {
+	m_selected_pointcloud = pc;
+}
+
+void PointcloudRenderer::align_pointclouds(int max_iter, float max_corr_dist, Pointcloud* source, Pointcloud* target)
+{
+	if (!source || !target)
+		return;
+	
 	static auto vector_to_pointcloud = [](const std::vector<PointAttributes>& vec, const glm::mat4 trans_mat) {
 		auto cloud = std::make_shared<pcl::PointCloud<pcl::PointXYZRGB>>();
 		cloud->width = static_cast<uint32_t>(vec.size());
@@ -172,13 +180,8 @@ void PointcloudRenderer::align_pointclouds(int max_iter, float max_corr_dist)
 
 	Logger::log("ICP started");
 
-	auto target_cloud = vector_to_pointcloud(m_pointclouds[0]->points(), *m_pointclouds[0]->get_transform_ptr());
-
-	// TODO: loop through every pc and align to COLMAP pointcloud
-
-	int i = 1;
-
-	auto source_cloud = vector_to_pointcloud(m_pointclouds[i]->points(), *m_pointclouds[i]->get_transform_ptr());
+	auto source_cloud = vector_to_pointcloud(source->points(), *source->get_transform_ptr());
+	auto target_cloud = vector_to_pointcloud(target->points(), *target->get_transform_ptr());
 
 
 	pcl::IterativeClosestPoint<pcl::PointXYZRGB, pcl::PointXYZRGB> icp;
@@ -200,7 +203,7 @@ void PointcloudRenderer::align_pointclouds(int max_iter, float max_corr_dist)
 		auto transform = eigen_to_glm(icp.getFinalTransformation());
 		Logger::log(std::format("Transformationmatrix:\n{}", Helper::mat4_to_string(transform)));
 
-		m_pointclouds[i]->set_transform(transform);
+		target->set_transform(transform);
 	}
 	else {
 		Logger::log("ICP failed to converge.", LoggingSeverity::Warning);
@@ -300,7 +303,7 @@ bool PointcloudRenderer::init_renderpipeline()
 
 
 	// binding layout
-	wgpu::BindGroupLayoutEntry bindgroup_layout_entries[] = {wgpu::Default, wgpu::Default};
+	wgpu::BindGroupLayoutEntry bindgroup_layout_entries[] = {wgpu::Default, wgpu::Default, wgpu::Default};
 	bindgroup_layout_entries[0].binding = 0;
 	bindgroup_layout_entries[0].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
 	bindgroup_layout_entries[0].buffer.type = wgpu::BufferBindingType::Uniform;
@@ -313,8 +316,14 @@ bool PointcloudRenderer::init_renderpipeline()
 	bindgroup_layout_entries[1].buffer.minBindingSize = sizeof(glm::mat4);
 	bindgroup_layout_entries[1].buffer.hasDynamicOffset = true;
 
+	bindgroup_layout_entries[2].binding = 2;
+	bindgroup_layout_entries[2].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
+	bindgroup_layout_entries[2].buffer.type = wgpu::BufferBindingType::Uniform;
+	bindgroup_layout_entries[2].buffer.minBindingSize = 64;
+	bindgroup_layout_entries[2].buffer.hasDynamicOffset = true;
+
 	wgpu::BindGroupLayoutDescriptor bindgroup_layout_desc{};
-	bindgroup_layout_desc.entryCount = 2;
+	bindgroup_layout_desc.entryCount = 3;
 	bindgroup_layout_desc.entries = bindgroup_layout_entries;
 	m_bindgroup_layout = m_device.createBindGroupLayout(bindgroup_layout_desc);
 	if (!m_bindgroup_layout) {
@@ -380,10 +389,26 @@ bool PointcloudRenderer::init_uniforms()
 	if (!m_transform_buffer) {
 		std::cerr << "Could not create transform buffer!" << std::endl;
 	}
+	
+	
+
+	wgpu::BufferDescriptor opacity_buffer_desc{};
+	opacity_buffer_desc.size = 64 * POINTCLOUD_MAX_NUM;
+	opacity_buffer_desc.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform;
+	opacity_buffer_desc.mappedAtCreation = false;
+	m_opacity_buffer = m_device.createBuffer(opacity_buffer_desc);
+	if (!m_opacity_buffer) {
+		std::cerr << "Could not create opacity buffer!" << std::endl;
+	}
+
 	glm::mat4 default_transform(1.f);
+	float default_opacity = 1.f;
 	for (int i = 0; i < POINTCLOUD_MAX_NUM; i++) {
-		uint32_t ubo_offset = sizeof(glm::mat4) * i;
-		m_queue.writeBuffer(m_transform_buffer, ubo_offset, &default_transform, sizeof(glm::mat4));
+		uint32_t ubo_transform_offset = sizeof(glm::mat4) * i;
+		m_queue.writeBuffer(m_transform_buffer, ubo_transform_offset, &default_transform, sizeof(glm::mat4));
+
+		uint32_t ubo_opacity_offset = (((sizeof(float) + 64 - 1) / 64) * 64) * i;
+		m_queue.writeBuffer(m_opacity_buffer, ubo_opacity_offset, &default_opacity, sizeof(float));
 	}
 
 	return true;
@@ -397,7 +422,7 @@ void PointcloudRenderer::terminate_uniforms()
 
 bool PointcloudRenderer::init_bindgroup()
 {
-	wgpu::BindGroupEntry bindings[] = {wgpu::Default, wgpu::Default};
+	wgpu::BindGroupEntry bindings[] = {wgpu::Default, wgpu::Default, wgpu::Default};
 	bindings[0].binding = 0;
 	bindings[0].buffer = m_renderuniform_buffer;
 	bindings[0].offset = 0;
@@ -408,9 +433,14 @@ bool PointcloudRenderer::init_bindgroup()
 	bindings[1].offset = 0;
 	bindings[1].size = sizeof(glm::mat4);
 
+	bindings[2].binding = 2;
+	bindings[2].buffer = m_opacity_buffer;
+	bindings[2].offset = 0;
+	bindings[2].size = 64;
+
 	wgpu::BindGroupDescriptor bindGroupDesc{};
 	bindGroupDesc.layout = m_bindgroup_layout;
-	bindGroupDesc.entryCount = 2;
+	bindGroupDesc.entryCount = 3;
 	bindGroupDesc.entries = bindings;
 	m_bindgroup = m_device.createBindGroup(bindGroupDesc);
 	if (!m_bindgroup) {
@@ -640,15 +670,25 @@ void PointcloudRenderer::on_frame()
 		}
 		glm::mat4 leveled_model = glm::toMat4(leveling) * model;*/
 
-		uint32_t ubo_offset = sizeof(glm::mat4) * i;
+		
+		uint32_t ubo_transform_offset = sizeof(glm::mat4) * i;
+		//uint32_t ubo_opacity_offset = sizeof(float) * i;
+		uint32_t ubo_opacity_offset = (((sizeof(float) + 64 - 1) / 64) * 64) * i;
+		uint32_t ubos[] = { ubo_transform_offset , ubo_opacity_offset };
 
 		// not using leveled model matrix for now (issues)
 		//m_queue.writeBuffer(m_transform_buffer, ubo_offset, &leveled_model, sizeof(glm::mat4));
-		m_queue.writeBuffer(m_transform_buffer, ubo_offset, &model, sizeof(glm::mat4));
+		m_queue.writeBuffer(m_transform_buffer, ubo_transform_offset, &model, sizeof(glm::mat4));
+
+		float point_opacity = 1.f;
+		if (m_selected_pointcloud != nullptr && m_selected_pointcloud != pc) {
+			point_opacity = .25f;
+		}
+		m_queue.writeBuffer(m_opacity_buffer, ubo_opacity_offset, &point_opacity, sizeof(float));
 
 		passEncoder.setPipeline(m_renderpipeline);
 		passEncoder.setVertexBuffer(0, pc->pointbuffer(), 0, pc->pointbuffer().getSize());
-		passEncoder.setBindGroup(0, m_bindgroup, 1, &ubo_offset);
+		passEncoder.setBindGroup(0, m_bindgroup, 2, ubos);
 		passEncoder.draw(6, pc->pointcount(), 0, 0);
 
 		i++;
@@ -664,7 +704,7 @@ void PointcloudRenderer::on_frame()
 	encoder.release();
 	m_queue.submit(command);
 
-	ImGui::Begin("Pointcloud Window", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
+	ImGui::Begin("Pointcloud Window", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoBringToFrontOnFocus);
 	ImGui::SetWindowPos({ GUI_MENU_WIDTH, 0.f });
 	ImGui::SetWindowSize({ (float)m_width, (float)m_height });
 

@@ -34,6 +34,30 @@ bool CameraCaptureSequence::is_initialized()
     return m_initialized;
 }
 
+//char** CameraCaptureSequence::get_capturenames()
+//{
+//	std::vector<char*> result;
+//	result.resize(m_captures.size());
+//
+//	std::transform(m_captures.begin(), m_captures.end(), result.begin(), [](CameraCapture* capture) {
+//		return capture->name;
+//	});
+//
+//	return &result[0];
+//}
+
+std::vector<std::string> CameraCaptureSequence::get_capturenames()
+{
+	std::vector<std::string> result;
+	result.resize(m_captures.size());
+
+	std::transform(m_captures.begin(), m_captures.end(), result.begin(), [](CameraCapture* capture) {
+		return capture->name;
+	});
+
+	return result;
+}
+
 
 void CameraCaptureSequence::save_images(std::filesystem::path images_dir_path, bool only_selected)
 {
@@ -121,6 +145,11 @@ void CameraCaptureSequence::save_cameras_extrinsics(std::filesystem::path path)
 std::vector<CameraCapture*>& CameraCaptureSequence::captures()
 {
 	return m_captures;
+}
+
+CameraCapture* CameraCaptureSequence::capture_at_idx(int idx)
+{
+	return m_captures.at(idx);
 }
 
 void CameraCaptureSequence::add_capture(CameraCapture* capture)
