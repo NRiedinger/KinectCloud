@@ -159,6 +159,10 @@ void Texture::delete_texture()
 
 bool Texture::save_to_buffer(unsigned char** out_buffer_pointer)
 {
+    if (!m_pixelbuffer) {
+        return false;
+    }
+    
     wgpu::CommandEncoderDescriptor command_encoder_desc{};
     command_encoder_desc.label = "save texture command encoder";
     wgpu::CommandEncoder encoder = m_device.createCommandEncoder(command_encoder_desc);

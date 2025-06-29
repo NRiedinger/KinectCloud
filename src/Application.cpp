@@ -5,11 +5,8 @@
 #include <cstdlib>
 
 #include "utils/k4aimguiextensions.h"
-#include <imgui.h>
 #include <backends/imgui_impl_wgpu.h>
 #include <backends/imgui_impl_glfw.h>
-
-#include "utils/imfilebrowser.h"
 
 #include <glm/glm.hpp>
 #include <glm/ext.hpp>
@@ -58,22 +55,6 @@ void Application::on_finish()
 
 void Application::on_frame()
 {
-	/*std::chrono::system_clock::time_point time_point_begin = std::chrono::system_clock::now();
-	std::chrono::system_clock::time_point time_point_end = std::chrono::system_clock::now();
-
-	time_point_begin = std::chrono::system_clock::now();
-	std::chrono::duration<double, std::milli > work_time = time_point_begin - time_point_end;
-
-	auto frametime_s = 1000.f / FPS;
-	if (work_time.count() < frametime_s) {
-		std::chrono::duration<double, std::milli> delta_ms(frametime_s - work_time.count());
-		auto delta_ms_duration = std::chrono::duration_cast<std::chrono::milliseconds>(delta_ms);
-		std::this_thread::sleep_for(std::chrono::milliseconds(delta_ms_duration.count()));
-	}
-	time_point_end = std::chrono::system_clock::now();
-	std::chrono::duration<double, std::milli> sleep_time = time_point_end - time_point_begin;*/
-
-
 	if (!m_window) {
 		throw std::exception("Attempted to use uninitialized window!");
 	}
@@ -118,18 +99,18 @@ void Application::capture()
 
 	std::string capture_name = std::format("{}", m_capture_sequence.captures().size());
 
+	capture->id = m_capture_sequence.get_next_id();
 	capture->name = capture_name;
-	capture->image_color_width = m_camera.color_texture_ptr()->width();
-	capture->image_color_height = m_camera.color_texture_ptr()->height();
-	if (!m_camera.color_texture_ptr()->save_to_buffer((unsigned char**)&capture->image_color_data)) {
-		Logger::log("Failed to save color texture to capture data buffer", LoggingSeverity::Error);
-	}
 	capture->is_selected = false;
 	capture->calibration = m_camera.calibration();
 	capture->depth_image = k4a::image(*m_camera.depth_image());
 	capture->color_image = k4a::image(*m_camera.color_image());
 	capture->transform = glm::mat4(1.f);
 	capture->camera_orientation = glm::quat(m_camera.orientation());
+
+	capture->preview_image = Texture(m_device, m_queue, nullptr, 0, capture->color_image.get_width_pixels(), capture->color_image.get_height_pixels(), wgpu::TextureFormat::BGRA8Unorm);
+	capture->preview_image.update(reinterpret_cast<const BgraPixel*>(capture->color_image.get_buffer()));
+	
 	m_capture_sequence.add_capture(capture);
 	CameraCaptureSequence::s_capturelist_updated = true;
 }
@@ -137,17 +118,17 @@ void Application::capture()
 void Application::run_colmap()
 {
 	std::string colmap_bin_path = TOOLS_DIR "/colmap-x64-windows-nocuda/COLMAP.bat";
-	std::string db_path = OUTPUT_DIR "/database.db"; // TODO: delete database.db if it already exists (from previous reconstruction)
+	std::string db_path = TMP_DIR "/colmap/database.db"; 
 	if (std::filesystem::exists(db_path)) {
 		Logger::log("database.db already exists. Removing...");
 		std::filesystem::remove(db_path);
 	}
 
 
-	std::string image_path = OUTPUT_DIR "/images";
-	std::string sparse_path = OUTPUT_DIR "/sparse"; // TODO: create folder, if it doesn't exist
+	std::string image_path = TMP_DIR "/colmap/images";
+	std::string sparse_path = TMP_DIR "/colmap/sparse"; 
 	if (!std::filesystem::exists(sparse_path)) {
-		Logger::log("/output/sparse/ does not exist. Creating...");
+		Logger::log(sparse_path + " does not exist. Creating...");
 		std::filesystem::create_directories(sparse_path);
 	}
 	else {
@@ -156,9 +137,9 @@ void Application::run_colmap()
 		}
 	}
 
-	std::string model_path = OUTPUT_DIR "/model_txt";
+	std::string model_path = TMP_DIR "/colmap/model_txt";
 	if (!std::filesystem::exists(model_path)) {
-		Logger::log("/output/model_txt/ does not exist. Creating...");
+		Logger::log(model_path + " does not exist. Creating...");
 		std::filesystem::create_directories(model_path);
 	}
 	else {
@@ -177,10 +158,29 @@ void Application::run_colmap()
 	std::system(cmd_feature_matching.c_str());
 	std::system(cmd_sfm_mapping.c_str());
 	std::system(cmd_model_converter.c_str());
-	/*std::cout 
-		<< cmd_feature_extraction << std::endl 
-		<< cmd_feature_matching << std::endl
-		<< cmd_sfm_mapping << std::endl;*/
+}
+
+void Application::export_for_3dgs()
+{
+	std::string timestamp = Helper::get_current_time_string();
+	std::string current_export_dir = EXPORT_DIR + std::format("/{}", timestamp);
+
+	// create folderstructure
+	std::filesystem::create_directories(current_export_dir);
+	std::filesystem::create_directories(current_export_dir + "/images");
+	std::filesystem::create_directories(current_export_dir + "/sparse/0");
+
+	// save images
+	m_capture_sequence.save_images(current_export_dir + "/images", true);
+
+	// points3D.txt
+	m_renderer.write_points3D(current_export_dir + "/sparse/0");
+
+	// cameras.txt
+	m_camera.save_camera_intrinsics(current_export_dir + "/sparse/0");
+
+	// images.txt
+	m_capture_sequence.save_cameras_extrinsics(current_export_dir + "/sparse/0");
 }
 
 bool Application::init_window_and_device()
@@ -378,6 +378,20 @@ bool Application::init_gui()
 		glfwSetWindowSize(m_window, w, h);
 	}
 
+	// set save/load file dialog properties
+	if (!std::filesystem::exists(CAPTURE_DIR)) {
+		std::filesystem::create_directories(CAPTURE_DIR);
+	}
+
+	m_save_dialog = ImGui::FileBrowser(ImGuiFileBrowserFlags_SelectDirectory | ImGuiFileBrowserFlags_CreateNewDir | ImGuiFileBrowserFlags_HideRegularFiles);
+	m_save_dialog.SetTitle("Select directory to save (must be empty)");
+	m_save_dialog.SetDirectory(CAPTURE_DIR);
+
+	m_load_dialog = ImGui::FileBrowser(ImGuiFileBrowserFlags_MultipleSelection);
+	m_load_dialog.SetTitle("Select captures to load");
+	m_load_dialog.SetDirectory(CAPTURE_DIR);
+	m_load_dialog.SetTypeFilters({ ".capture" });
+	
 	
 	return true;
 }
@@ -464,6 +478,56 @@ void Application::render_capture_menu()
 {
 	ImGui::Text("Camera Captures");
 
+	ImGui::SameLine();
+
+	{
+		if (ImGui::Button("Save")) {
+			m_save_dialog.Open();
+		}
+		m_save_dialog.Display();
+
+		if (m_save_dialog.HasSelected()) {
+			auto selected_path = m_save_dialog.GetSelected();
+			if (std::filesystem::is_empty(selected_path)) {
+				if (m_capture_sequence.save_sequence(selected_path)) {
+					Logger::log(std::format("Successfully saved captures to {}", selected_path.string()));
+				}
+				else {
+					Logger::log("Failed to save captures", LoggingSeverity::Error);
+				}
+			}
+			else {
+				Logger::log(std::format("Failed to save captures to {}. Directory must be empty.", selected_path.string()), LoggingSeverity::Error);
+			}
+			
+			m_save_dialog.ClearSelected();
+		}
+	}
+
+	ImGui::SameLine();
+
+	if (ImGui::Button("Load")) {
+		m_load_dialog.Open();
+	}
+
+	m_load_dialog.Display();
+
+	if (m_load_dialog.HasSelected()) {
+		auto paths = m_load_dialog.GetMultiSelected();
+		if (m_capture_sequence.load_sequence(paths)) {
+			Logger::log("Successfully loaded captures");
+			for (auto& capture : m_capture_sequence.captures()) {
+				capture->preview_image = Texture(m_device, m_queue, nullptr, 0, capture->color_image.get_width_pixels(), capture->color_image.get_height_pixels(), wgpu::TextureFormat::BGRA8Unorm);
+				capture->preview_image.update(reinterpret_cast<const BgraPixel*>(capture->color_image.get_buffer()));
+			}
+		}
+		else {
+			Logger::log("Failed to load captures", LoggingSeverity::Error);
+		}
+
+		m_load_dialog.ClearSelected();
+	}
+
 	ImGui::Separator();
 
 	ImGui::BeginChild("Captures Scrollable", { 0, GUI_CAPTURELIST_HEIGHT }, NULL, ImGuiWindowFlags_AlwaysVerticalScrollbar);
@@ -481,7 +545,7 @@ void Application::render_capture_menu()
 					if (m_renderer.get_num_pointclouds() < POINTCLOUD_MAX_NUM) {
 						auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
 						pc->set_color(Helper::get_pc_color_by_index(i));
-						pc->load_from_capture(capture->depth_image, capture->color_image, capture->calibration, m_camera.orientation());
+						pc->load_from_capture(capture->depth_image, capture->color_image, capture->calibration, capture->camera_orientation);
 						capture->data_pointer = m_renderer.add_pointcloud(pc);
 						capture->is_selected = true;
 					}
@@ -494,6 +558,28 @@ void Application::render_capture_menu()
 					capture->is_selected = false;
 				}
 			}
+			ImGui::SameLine();
+			ImGui::SetCursorPosX(ImGui::GetContentRegionAvail().x);
+			if (ImGui::Button("img", {40, 25})) {
+				ImGui::OpenPopup("Image preview");
+			}
+
+			if (ImGui::BeginPopup("Image preview")) {
+				ImVec2 image_dims = { (float)capture->preview_image.width(), (float)capture->preview_image.height() };
+				ImVec2 preview_dims = { 1280.f, 720.f };
+				float image_aspect_ratio = image_dims.x / image_dims.y;
+				float preview_aspect_ratio = preview_dims.x / preview_dims.y;
+				if (image_aspect_ratio > preview_aspect_ratio) {
+					image_dims = { preview_dims.x, preview_dims.x / image_aspect_ratio };
+				}
+				else {
+					image_dims = { preview_dims.y * image_aspect_ratio, preview_dims.y };
+				}
+				ImGui::Image((ImTextureID)(intptr_t)capture->preview_image.view(), image_dims);
+
+				ImGui::EndPopup();
+			}
+
 
 			if (m_app_state == AppState::Pointcloud && capture->is_selected) {
 
@@ -504,11 +590,9 @@ void Application::render_capture_menu()
 
 				glm::vec3 rotation_deg = Helper::quat_to_euler_degrees(rotation_rad);
 
-				ImGui::SliderFloat3("Position", &translation.x, -10.f, 10.f);
-				ImGui::SliderFloat3("Rotation", &rotation_deg.x, -180.f, 180.f);
-				ImGui::SliderFloat("Scale", &scale.x, .1f, 100.f);
-
-				
+				ImGui::DragFloat3("Position", &translation.x, 1.f, -100.f, 100.f);
+				ImGui::DragFloat3("Rotation", &rotation_deg.x, 1.f, -180.f, 180.f);
+				ImGui::DragFloat("Scale", &scale.x, 1.f, .1f, 100.f);
 
 				glm::mat4 new_transform = glm::translate(glm::mat4(1.f), translation) *
 					glm::toMat4(Helper::euler_degrees_to_quat(rotation_deg)) *
@@ -519,11 +603,11 @@ void Application::render_capture_menu()
 				if (ImGui::Button("Reset")) {
 					capture->transform = glm::mat4(1.f);
 				}
+				
 			}
 
 			ImGui::TreePop();
 		}
-		
 
 		ImGui::Separator();
 
@@ -572,14 +656,14 @@ void Application::render_capture_menu()
 				ImGui::BeginDisabled();
 
 			if (ImGui::Button("Generate Pointcloud")) {
-				// save all captured images to /output/images
-				m_capture_sequence.save_sequence();
+				// save all captured images to /tmp/colmap/images
+				m_capture_sequence.save_images(TMP_DIR "/colmap/images");
 
 				// run colmap on saved images
 				run_colmap();
 				
-				
 				CameraCapture* capture = new CameraCapture();
+				capture->id = m_capture_sequence.get_next_id();
 				capture->name = "COLMAP Pointcloud";
 				capture->is_selected = true;
 				capture->is_colmap = true;
@@ -590,7 +674,7 @@ void Application::render_capture_menu()
 
 				auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
 				pc->set_is_colmap(true);
-				pc->load_from_points3D(OUTPUT_DIR "/sparse/0/points3D.bin");
+				pc->load_from_points3D(TMP_DIR "/colmap/sparse/0/points3D.bin");
 				m_renderer.add_pointcloud(pc);
 
 				m_app_state = AppState::Pointcloud;
@@ -606,7 +690,7 @@ void Application::render_capture_menu()
 
 			{
 				CameraCapture* capture = new CameraCapture();
-
+				capture->id = m_capture_sequence.get_next_id();
 				capture->name = "Test 1";
 				capture->is_selected = true;
 				//capture->transform = glm::mat4(1.f) * glm::toMat4(glm::quat(glm::radians(glm::vec3(0.f, 0.f, 0.f))));
@@ -623,7 +707,7 @@ void Application::render_capture_menu()
 
 			{
 				CameraCapture* capture = new CameraCapture();
-
+				capture->id = m_capture_sequence.get_next_id();
 				capture->name = "Test 2";
 				capture->is_selected = true;
 				//capture->transform = glm::translate(glm::mat4(1.f) * glm::toMat4(glm::quat(glm::radians(glm::vec3(0.f, 0.f, 0.f)))), glm::vec3(1.f, 0.f, 0.f));
@@ -651,6 +735,10 @@ void Application::render_capture_menu()
 		if (ImGui::Button("Align")) {
 			m_renderer.align_pointclouds(icp_max_iter, icp_max_corr_dist);
 		}
+
+		if (ImGui::Button("Export")) {
+			export_for_3dgs();
+		}
 	}
 }
 
@@ -660,28 +748,19 @@ void Application::render_debug()
 	ImGui::SetWindowPos({ 0, m_window_height - GUI_CONSOLE_HEIGHT });
 	ImGui::SetWindowSize({ GUI_MENU_WIDTH, GUI_CONSOLE_HEIGHT });
 
-	auto io = ImGui::GetIO();
-	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
-	ImGui::Text("Number of captures: %d", m_capture_sequence.captures().size());
-	ImGui::Text("Number of pointclouds: %d", m_renderer.get_num_pointclouds());
-	ImGui::Text("Number of points: %d", m_renderer.get_num_vertices());
-	//ImGui::TextUnformatted(std::format("Delta transform: \n{}", Util::mat4_to_string(m_camera.delta_transform())).c_str());
-	
-	/*glm::vec3 scale, translation, skew;
-	glm::vec4 perspective;
-	glm::quat rotation_rad;
-	glm::decompose(m_camera.delta_transform(), scale, rotation_rad, translation, skew, perspective);
+	if (m_app_state == AppState::Pointcloud) {
+		auto io = ImGui::GetIO();
+		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+		ImGui::Text("Number of captures: %d", m_capture_sequence.captures().size());
+		ImGui::Text("Number of pointclouds: %d", m_renderer.get_num_pointclouds());
+		ImGui::Text("Number of points: %d", m_renderer.get_num_vertices());
 
-	glm::vec3 rotation_deg = Util::quat_to_euler_degrees(rotation_rad);
-	ImGui::Text(std::format("{}", rotation_deg.x).c_str());
-	ImGui::Text(std::format("{}", rotation_deg.y).c_str());
-	ImGui::Text(std::format("{}", rotation_deg.z).c_str());*/
-	if (ImGui::Button("Reload Shader")) {
-		m_renderer.reload_renderpipeline();
+		if (ImGui::Button("Reload Shader")) {
+			m_renderer.reload_renderpipeline();
+		}
+
+		ImGui::SliderFloat("Point size", &m_renderer.uniforms().point_size, .01f, 1.f);
 	}
-
-	ImGui::SliderFloat("Point size", &m_renderer.uniforms().point_size, .01f, 1.f);
-	
 
 	ImGui::End();
 }

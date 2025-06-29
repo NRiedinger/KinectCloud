@@ -12,28 +12,19 @@
 
 class CameraCapture {
 public:
-	~CameraCapture() {
-		if(image_color_data)
-			image_color_data->delete_texture();
-		if(image_depth_data)
-			image_depth_data->delete_texture();
-	}
 
+	int id;
 	std::string name;
-	bool is_selected;
+	bool is_selected = false;
 	bool is_colmap = false;
-	Texture* image_color_data;
-	int image_color_width;
-	int image_color_height;
-	Texture* image_depth_data;
-	int image_depth_width;
-	int image_depth_height;
+	bool is_expanded = false;
 	k4a::image depth_image;
 	k4a::image color_image;
 	k4a::calibration calibration;
 	glm::mat4 transform;
-	Pointcloud* data_pointer;
 	glm::quat camera_orientation;
+	Pointcloud* data_pointer;
+	Texture preview_image;
 };
 
 class CameraCaptureSequence
@@ -42,10 +33,14 @@ public:
 	bool on_init();
 	void on_terminate();
 	bool is_initialized();
-	void save_sequence();
-	std::vector<std::string> get_captures_names();
+	void save_images(std::filesystem::path path, bool only_selected = false);
+	void save_cameras_extrinsics(std::filesystem::path path);
 	std::vector<CameraCapture*>& captures();
 	void add_capture(CameraCapture* capture);
+	bool save_sequence(const std::filesystem::path path);
+	bool load_sequence(const std::vector<std::filesystem::path> paths);
+
+	int get_next_id();
 
 	inline static bool s_capturelist_updated = false;
 private:

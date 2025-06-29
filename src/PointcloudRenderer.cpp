@@ -507,6 +507,16 @@ void PointcloudRenderer::handle_pointcloud_mouse_events()
 
 		// clamp pitch
 		m_camerastate.angles.y = glm::clamp(m_camerastate.angles.y, -(float)M_PI / 2 + 1e-5f, (float)M_PI / 2 - 1e-5f);
+		// clamp yaw
+		
+		float yaw = glm::degrees(m_camerastate.angles.x);
+		if (yaw > 360.f) {
+			yaw -= 360.f;
+		}
+		else if (yaw < 0.f) {
+			yaw += 360.f;
+		}
+		m_camerastate.angles.x = glm::radians(yaw);
 		update_viewmatrix();
 	}
 
@@ -523,6 +533,40 @@ void PointcloudRenderer::reload_renderpipeline()
 {
 	terminate_renderpipeline();
 	init_renderpipeline();
+}
+
+void PointcloudRenderer::write_points3D(std::filesystem::path path)
+{
+	std::ofstream ofs(path.string() + "/points3D.txt");
+	if (!ofs) {
+		return;
+	}
+
+
+	int id = 1;
+	for (const auto& pc : m_pointclouds) {
+		for (const auto& p : pc->points()) {
+			if (!std::isfinite(p.position.x) ||
+				!std::isfinite(p.position.y) ||
+				!std::isfinite(p.position.z)) {
+				continue;
+			}
+
+			// id
+			ofs << id++ << " ";
+			// pos
+			//ofs << p.position.x << " " << p.position.y << " " << p.position.z << " ";
+			ofs << p.position.x / 1000.f << " " << p.position.y / 1000.f << " " << p.position.z / 1000.f << " ";
+			// color
+			ofs << static_cast<int>(p.color.r * 255) << " " << static_cast<int>(p.color.g * 255) << " " << static_cast<int>(p.color.b * 255) << " ";
+			// error
+			ofs << "0.0 ";
+			// no track list
+			ofs << "\n";
+		}
+	}
+
+	ofs.close();
 }
 
 Uniforms::RenderUniforms& PointcloudRenderer::uniforms()
@@ -580,7 +624,7 @@ void PointcloudRenderer::on_frame()
 
 		// glm::mat4 model = glm::scale(*pc->get_transform_ptr(), glm::vec3(100.f / get_futhest_point()));
 		glm::mat4 model = glm::scale(*pc->get_transform_ptr(), glm::vec3(1.f));
-		glm::quat cam_orienation = pc->camera_orienation();
+		/*glm::quat cam_orienation = pc->camera_orienation();
 
 		glm::vec3 world_up = glm::vec3(0.f, 0.f, 1.f);
 		glm::vec3 camera_up = cam_orienation * world_up;
@@ -594,10 +638,13 @@ void PointcloudRenderer::on_frame()
 		else {
 			leveling = glm::angleAxis(angle, glm::normalize(axis));
 		}
-		glm::mat4 leveled_model = glm::toMat4(leveling) * model;
+		glm::mat4 leveled_model = glm::toMat4(leveling) * model;*/
 
 		uint32_t ubo_offset = sizeof(glm::mat4) * i;
-		m_queue.writeBuffer(m_transform_buffer, ubo_offset, &leveled_model, sizeof(glm::mat4));
+
+		// not using leveled model matrix for now (issues)
+		//m_queue.writeBuffer(m_transform_buffer, ubo_offset, &leveled_model, sizeof(glm::mat4));
+		m_queue.writeBuffer(m_transform_buffer, ubo_offset, &model, sizeof(glm::mat4));
 
 		passEncoder.setPipeline(m_renderpipeline);
 		passEncoder.setVertexBuffer(0, pc->pointbuffer(), 0, pc->pointbuffer().getSize());
