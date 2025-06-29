@@ -26,6 +26,7 @@ public:
 
 	void capture();
 	void run_colmap();
+	void export_for_3dgs();
 
 private:
 	bool init_window_and_device();

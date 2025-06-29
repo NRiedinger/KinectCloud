@@ -294,6 +294,17 @@ void Pointcloud::generate_point_cloud(const k4a::image xy_table, k4a::image poin
 
 		m_points.push_back(point);
 	}
+
+	//// test
+	//PointAttributes pt;
+	//pt.position.x = 0.f;
+	//pt.position.y = 0.f;
+	//pt.position.z = 0.f;
+
+	//pt.color.r = 1.f;
+	//pt.color.g = 0.f;
+	//pt.color.b = 0.f;
+	//m_points.push_back(pt);
 }
 
 void Pointcloud::write_point_cloud_to_buffer(/*const k4a::image point_cloud, int point_count*/)

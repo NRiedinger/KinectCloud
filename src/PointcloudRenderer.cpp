@@ -507,6 +507,16 @@ void PointcloudRenderer::handle_pointcloud_mouse_events()
 
 		// clamp pitch
 		m_camerastate.angles.y = glm::clamp(m_camerastate.angles.y, -(float)M_PI / 2 + 1e-5f, (float)M_PI / 2 - 1e-5f);
+		// clamp yaw
+		
+		float yaw = glm::degrees(m_camerastate.angles.x);
+		if (yaw > 360.f) {
+			yaw -= 360.f;
+		}
+		else if (yaw < 0.f) {
+			yaw += 360.f;
+		}
+		m_camerastate.angles.x = glm::radians(yaw);
 		update_viewmatrix();
 	}
 
@@ -523,6 +533,40 @@ void PointcloudRenderer::reload_renderpipeline()
 {
 	terminate_renderpipeline();
 	init_renderpipeline();
+}
+
+void PointcloudRenderer::write_points3D(std::filesystem::path path)
+{
+	std::ofstream ofs(path.string() + "/points3D.txt");
+	if (!ofs) {
+		return;
+	}
+
+
+	int id = 1;
+	for (const auto& pc : m_pointclouds) {
+		for (const auto& p : pc->points()) {
+			if (!std::isfinite(p.position.x) ||
+				!std::isfinite(p.position.y) ||
+				!std::isfinite(p.position.z)) {
+				continue;
+			}
+
+			// id
+			ofs << id++ << " ";
+			// pos
+			//ofs << p.position.x << " " << p.position.y << " " << p.position.z << " ";
+			ofs << p.position.x / 1000.f << " " << p.position.y / 1000.f << " " << p.position.z / 1000.f << " ";
+			// color
+			ofs << static_cast<int>(p.color.r * 255) << " " << static_cast<int>(p.color.g * 255) << " " << static_cast<int>(p.color.b * 255) << " ";
+			// error
+			ofs << "0.0 ";
+			// no track list
+			ofs << "\n";
+		}
+	}
+
+	ofs.close();
 }
 
 Uniforms::RenderUniforms& PointcloudRenderer::uniforms()

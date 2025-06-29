@@ -23,6 +23,8 @@ public:
 	k4a::image* color_image();
 	k4a::calibration calibration();
 
+	void save_camera_intrinsics(std::filesystem::path path);
+
 	inline k4a::device* device() {
 		return &m_k4a_device;
 	}

@@ -3,12 +3,15 @@
 #include <sstream>   
 #include <fstream>
 #include <iomanip>
+#include <ctime>
 
 #include <format>
 #include <thread>
 
 #include <glm/glm.hpp>
 #include <glm/ext.hpp>
+
+#include <k4a/k4a.hpp>
 
 
 #pragma once
@@ -95,6 +98,40 @@ public:
 			default:
 				return glm::vec3(1.f, 1.f, 1.f);
 		}
+	}
+
+	inline static std::string get_current_time_string() {
+		auto now = std::chrono::system_clock::now();
+		std::time_t now_time_t = std::chrono::system_clock::to_time_t(now);
+		std::tm local_tm = *std::localtime(&now_time_t);
+
+		std::ostringstream oss;
+		oss << std::put_time(&local_tm, "%Y-%m-%d_%H-%M-%S");
+		return oss.str();
+	}
+
+	inline static k4a::image convert_bgra_to_rgba(const k4a::image &bgra_image) {
+		int width = bgra_image.get_width_pixels();
+		int height = bgra_image.get_height_pixels();
+
+		k4a::image rgba_image = k4a::image::create(
+			K4A_IMAGE_FORMAT_COLOR_BGRA32, 
+			width,
+			height,
+			width * 4
+		);
+
+		auto bgra_data = bgra_image.get_buffer();
+		auto rgba_data = rgba_image.get_buffer();
+
+		for (int i = 0; i < width * height; i++) {
+			rgba_data[4 * i + 0] = bgra_data[4 * i + 2];
+			rgba_data[4 * i + 1] = bgra_data[4 * i + 1]; 
+			rgba_data[4 * i + 2] = bgra_data[4 * i + 0];
+			rgba_data[4 * i + 3] = bgra_data[4 * i + 3];
+		}
+
+		return rgba_image;
 	}
 
 	template<typename T>

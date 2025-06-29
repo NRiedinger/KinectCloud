@@ -35,12 +35,11 @@ bool CameraCaptureSequence::is_initialized()
 }
 
 
-void CameraCaptureSequence::save_for_colmap()
+void CameraCaptureSequence::save_images(std::filesystem::path images_dir_path, bool only_selected)
 {
-	std::filesystem::path images_dir_path = OUTPUT_DIR "/images";
 	if (!std::filesystem::exists(images_dir_path)) {
 		// if directory does not exist, create it
-		Logger::log("/output/images/ does not exist. Creating...");
+		Logger::log(images_dir_path.string() + " does not exist. Creating...");
 		std::filesystem::create_directories(images_dir_path);
 	}
 	else {
@@ -54,13 +53,19 @@ void CameraCaptureSequence::save_for_colmap()
 	for (auto& capture : m_captures) {
 		std::string path = std::format("{}/{}.png", images_dir_path.string(), capture->name);
 
+		if (!capture->is_selected && only_selected) {
+			continue;
+		}
+
+		auto color_image_converted = Helper::convert_bgra_to_rgba(capture->color_image);
+
 		bool success = !!stbi_write_png(
 			path.c_str(),
-			capture->color_image.get_width_pixels(),
-			capture->color_image.get_height_pixels(),
+			color_image_converted.get_width_pixels(),
+			color_image_converted.get_height_pixels(),
 			4,
-			(void*)capture->color_image.get_buffer(),
-			4 * capture->color_image.get_width_pixels()
+			(void*)color_image_converted.get_buffer(),
+			4 * color_image_converted.get_width_pixels()
 		);
 
 		if (!success) {
@@ -74,6 +79,42 @@ void CameraCaptureSequence::save_for_colmap()
 	
 	Logger::log(std::format("Successfully saved {} captures.", m_captures.size()));
 	return;
+}
+
+void CameraCaptureSequence::save_cameras_extrinsics(std::filesystem::path path)
+{
+	std::ofstream ofs(path.string() + "/images.txt");
+	if (!ofs) {
+		return;
+	}
+
+	for (const auto& capture : m_captures) {
+		if (capture->is_colmap) {
+			continue;
+		}
+
+		if (!capture->is_selected) {
+			continue;
+		}
+
+		std::string file_name = std::format("{}.png", capture->name);
+
+		/*glm::mat4 trans_mat_inv = glm::inverse(capture->transform);
+		glm::mat3 rot = glm::mat3(trans_mat_inv);
+		glm::quat q = glm::quat_cast(rot);
+		glm::vec3 t = glm::vec3(trans_mat_inv[3]);*/
+
+		glm::mat3 rot = glm::mat3(capture->transform);
+		glm::quat q = glm::quat_cast(rot);
+		glm::vec3 t = glm::vec3(capture->transform[3]);
+
+		ofs << std::format("{} {} {} {} {} {} {} {} {} {} \n",
+						   capture->id, q.w, q.x, q.y, q.z, t.x, t.y, t.z, 1, file_name);
+
+		ofs << "0.0 0.0 -1 \n";
+	}
+
+	ofs.close();
 }
 
 
@@ -103,7 +144,6 @@ bool CameraCaptureSequence::save_sequence(const std::filesystem::path path)
 
 
 		Helper::write_string(ofs, capture->name);
-		Helper::write_binary(ofs, capture->is_selected);
 
 		// depth image
 		int depth_width = capture->depth_image.get_width_pixels();
@@ -146,9 +186,11 @@ bool CameraCaptureSequence::load_sequence(const std::vector<std::filesystem::pat
 
 		CameraCapture* capture = new CameraCapture();
 
+		capture->id = get_next_id();
 		Helper::read_string(ifs, capture->name);
-		Helper::read_binary(ifs, capture->is_selected);
+		capture->is_selected = false;
 		capture->is_colmap = false;
+		capture->is_expanded = false;
 
 		// depth image
 		int depth_width;
@@ -199,5 +241,14 @@ bool CameraCaptureSequence::load_sequence(const std::vector<std::filesystem::pat
 	}
 	
 	return true;
+}
+
+int CameraCaptureSequence::get_next_id()
+{
+	if (m_captures.size() < 1) {
+		return 1;
+	}
+
+	return m_captures.back()->id + 1;
 }
 

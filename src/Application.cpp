@@ -115,6 +115,7 @@ void Application::capture()
 
 	std::string capture_name = std::format("{}", m_capture_sequence.captures().size());
 
+	capture->id = m_capture_sequence.get_next_id();
 	capture->name = capture_name;
 	capture->is_selected = false;
 	capture->calibration = m_camera.calibration();
@@ -122,6 +123,10 @@ void Application::capture()
 	capture->color_image = k4a::image(*m_camera.color_image());
 	capture->transform = glm::mat4(1.f);
 	capture->camera_orientation = glm::quat(m_camera.orientation());
+
+	capture->preview_image = Texture(m_device, m_queue, nullptr, 0, capture->color_image.get_width_pixels(), capture->color_image.get_height_pixels(), wgpu::TextureFormat::BGRA8Unorm);
+	capture->preview_image.update(reinterpret_cast<const BgraPixel*>(capture->color_image.get_buffer()));
+	
 	m_capture_sequence.add_capture(capture);
 	CameraCaptureSequence::s_capturelist_updated = true;
 }
@@ -129,17 +134,17 @@ void Application::capture()
 void Application::run_colmap()
 {
 	std::string colmap_bin_path = TOOLS_DIR "/colmap-x64-windows-nocuda/COLMAP.bat";
-	std::string db_path = OUTPUT_DIR "/database.db"; // TODO: delete database.db if it already exists (from previous reconstruction)
+	std::string db_path = TMP_DIR "/colmap/database.db"; 
 	if (std::filesystem::exists(db_path)) {
 		Logger::log("database.db already exists. Removing...");
 		std::filesystem::remove(db_path);
 	}
 
 
-	std::string image_path = OUTPUT_DIR "/images";
-	std::string sparse_path = OUTPUT_DIR "/sparse"; // TODO: create folder, if it doesn't exist
+	std::string image_path = TMP_DIR "/colmap/images";
+	std::string sparse_path = TMP_DIR "/colmap/sparse"; 
 	if (!std::filesystem::exists(sparse_path)) {
-		Logger::log("/output/sparse/ does not exist. Creating...");
+		Logger::log(sparse_path + " does not exist. Creating...");
 		std::filesystem::create_directories(sparse_path);
 	}
 	else {
@@ -148,9 +153,9 @@ void Application::run_colmap()
 		}
 	}
 
-	std::string model_path = OUTPUT_DIR "/model_txt";
+	std::string model_path = TMP_DIR "/colmap/model_txt";
 	if (!std::filesystem::exists(model_path)) {
-		Logger::log("/output/model_txt/ does not exist. Creating...");
+		Logger::log(model_path + " does not exist. Creating...");
 		std::filesystem::create_directories(model_path);
 	}
 	else {
@@ -169,10 +174,29 @@ void Application::run_colmap()
 	std::system(cmd_feature_matching.c_str());
 	std::system(cmd_sfm_mapping.c_str());
 	std::system(cmd_model_converter.c_str());
-	/*std::cout 
-		<< cmd_feature_extraction << std::endl 
-		<< cmd_feature_matching << std::endl
-		<< cmd_sfm_mapping << std::endl;*/
+}
+
+void Application::export_for_3dgs()
+{
+	std::string timestamp = Helper::get_current_time_string();
+	std::string current_export_dir = EXPORT_DIR + std::format("/{}", timestamp);
+
+	// create folderstructure
+	std::filesystem::create_directories(current_export_dir);
+	std::filesystem::create_directories(current_export_dir + "/images");
+	std::filesystem::create_directories(current_export_dir + "/sparse/0");
+
+	// save images
+	m_capture_sequence.save_images(current_export_dir + "/images", true);
+
+	// points3D.txt
+	m_renderer.write_points3D(current_export_dir + "/sparse/0");
+
+	// cameras.txt
+	m_camera.save_camera_intrinsics(current_export_dir + "/sparse/0");
+
+	// images.txt
+	m_capture_sequence.save_cameras_extrinsics(current_export_dir + "/sparse/0");
 }
 
 bool Application::init_window_and_device()
@@ -508,6 +532,10 @@ void Application::render_capture_menu()
 		auto paths = m_load_dialog.GetMultiSelected();
 		if (m_capture_sequence.load_sequence(paths)) {
 			Logger::log("Successfully loaded captures");
+			for (auto& capture : m_capture_sequence.captures()) {
+				capture->preview_image = Texture(m_device, m_queue, nullptr, 0, capture->color_image.get_width_pixels(), capture->color_image.get_height_pixels(), wgpu::TextureFormat::BGRA8Unorm);
+				capture->preview_image.update(reinterpret_cast<const BgraPixel*>(capture->color_image.get_buffer()));
+			}
 		}
 		else {
 			Logger::log("Failed to load captures", LoggingSeverity::Error);
@@ -546,6 +574,28 @@ void Application::render_capture_menu()
 					capture->is_selected = false;
 				}
 			}
+			ImGui::SameLine();
+			ImGui::SetCursorPosX(ImGui::GetContentRegionAvail().x);
+			if (ImGui::Button("img", {40, 25})) {
+				ImGui::OpenPopup("Image preview");
+			}
+
+			if (ImGui::BeginPopup("Image preview")) {
+				ImVec2 image_dims = { (float)capture->preview_image.width(), (float)capture->preview_image.height() };
+				ImVec2 preview_dims = { 1280.f, 720.f };
+				float image_aspect_ratio = image_dims.x / image_dims.y;
+				float preview_aspect_ratio = preview_dims.x / preview_dims.y;
+				if (image_aspect_ratio > preview_aspect_ratio) {
+					image_dims = { preview_dims.x, preview_dims.x / image_aspect_ratio };
+				}
+				else {
+					image_dims = { preview_dims.y * image_aspect_ratio, preview_dims.y };
+				}
+				ImGui::Image((ImTextureID)(intptr_t)capture->preview_image.view(), image_dims);
+
+				ImGui::EndPopup();
+			}
+
 
 			if (m_app_state == AppState::Pointcloud && capture->is_selected) {
 
@@ -560,8 +610,6 @@ void Application::render_capture_menu()
 				ImGui::SliderFloat3("Rotation", &rotation_deg.x, -180.f, 180.f);
 				ImGui::SliderFloat("Scale", &scale.x, .1f, 100.f);
 
-				
-
 				glm::mat4 new_transform = glm::translate(glm::mat4(1.f), translation) *
 					glm::toMat4(Helper::euler_degrees_to_quat(rotation_deg)) *
 					glm::scale(glm::mat4(1.f), glm::vec3(scale.x));
@@ -571,11 +619,11 @@ void Application::render_capture_menu()
 				if (ImGui::Button("Reset")) {
 					capture->transform = glm::mat4(1.f);
 				}
+				
 			}
 
 			ImGui::TreePop();
 		}
-		
 
 		ImGui::Separator();
 
@@ -624,13 +672,14 @@ void Application::render_capture_menu()
 				ImGui::BeginDisabled();
 
 			if (ImGui::Button("Generate Pointcloud")) {
-				// save all captured images to /output/images
-				m_capture_sequence.save_for_colmap();
+				// save all captured images to /tmp/colmap/images
+				m_capture_sequence.save_images(TMP_DIR "/colmap/images");
 
 				// run colmap on saved images
 				run_colmap();
 				
 				CameraCapture* capture = new CameraCapture();
+				capture->id = m_capture_sequence.get_next_id();
 				capture->name = "COLMAP Pointcloud";
 				capture->is_selected = true;
 				capture->is_colmap = true;
@@ -641,7 +690,7 @@ void Application::render_capture_menu()
 
 				auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
 				pc->set_is_colmap(true);
-				pc->load_from_points3D(OUTPUT_DIR "/sparse/0/points3D.bin");
+				pc->load_from_points3D(TMP_DIR "/colmap/sparse/0/points3D.bin");
 				m_renderer.add_pointcloud(pc);
 
 				m_app_state = AppState::Pointcloud;
@@ -657,7 +706,7 @@ void Application::render_capture_menu()
 
 			{
 				CameraCapture* capture = new CameraCapture();
-
+				capture->id = m_capture_sequence.get_next_id();
 				capture->name = "Test 1";
 				capture->is_selected = true;
 				//capture->transform = glm::mat4(1.f) * glm::toMat4(glm::quat(glm::radians(glm::vec3(0.f, 0.f, 0.f))));
@@ -674,7 +723,7 @@ void Application::render_capture_menu()
 
 			{
 				CameraCapture* capture = new CameraCapture();
-
+				capture->id = m_capture_sequence.get_next_id();
 				capture->name = "Test 2";
 				capture->is_selected = true;
 				//capture->transform = glm::translate(glm::mat4(1.f) * glm::toMat4(glm::quat(glm::radians(glm::vec3(0.f, 0.f, 0.f)))), glm::vec3(1.f, 0.f, 0.f));
@@ -701,6 +750,11 @@ void Application::render_capture_menu()
 
 		if (ImGui::Button("Align")) {
 			m_renderer.align_pointclouds(icp_max_iter, icp_max_corr_dist);
+		}
+
+		if (ImGui::Button("Export")) {
+			//m_renderer.write_points3D(EXPORT_DIR);
+			export_for_3dgs();
 		}
 	}
 }

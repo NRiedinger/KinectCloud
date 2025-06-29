@@ -32,6 +32,8 @@ public:
 	void align_pointclouds(int max_iter, float max_corr_dist);
 	void reload_renderpipeline();
 
+	void write_points3D(std::filesystem::path path);
+
 	Uniforms::RenderUniforms& uniforms();
 
 private:
