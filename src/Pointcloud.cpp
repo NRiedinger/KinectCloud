@@ -238,6 +238,7 @@ void Pointcloud::generate_point_cloud(const k4a::image xy_table, k4a::image poin
 	k4a_float3_t* point_cloud_data = (k4a_float3_t*)point_cloud.get_buffer();
 
 	*point_count = 0;
+	
 	for (int i = 0; i < width * height; i++) {
 		if (depth_data[i] != 0 && !isnan(xy_table_data[i].xy.x) && !isnan(xy_table_data[i].xy.y)) {
 			point_cloud_data[i].xyz.x = xy_table_data[i].xy.x * (float)depth_data[i];
@@ -258,6 +259,7 @@ void Pointcloud::generate_point_cloud(const k4a::image xy_table, k4a::image poin
 	}
 
 	m_points.clear();
+	glm::vec3 sum(0.f);
 	for (int i = 0; i < width * height; i++) {
 
 		if (std::isnan(point_cloud_data[i].xyz.x) || 
@@ -282,63 +284,24 @@ void Pointcloud::generate_point_cloud(const k4a::image xy_table, k4a::image poin
 		point.position.y = (float)point_cloud_data[i].xyz.z * scale;
 		point.position.z = (float)-point_cloud_data[i].xyz.y * scale;
 
-		/*point.color.r = m_color.r;
-		point.color.g = m_color.g;
-		point.color.b = m_color.b;*/
-
-		
-
 		point.color.r = r / 255.f;
 		point.color.g = g / 255.f;
 		point.color.b = b / 255.f;
 
+		sum += point.position;
+
 		m_points.push_back(point);
 	}
 
-	//// test
-	//PointAttributes pt;
-	//pt.position.x = 0.f;
-	//pt.position.y = 0.f;
-	//pt.position.z = 0.f;
+	m_centroid = sum / static_cast<float>(m_points.size());
 
-	//pt.color.r = 1.f;
-	//pt.color.g = 0.f;
-	//pt.color.b = 0.f;
-	//m_points.push_back(pt);
+	for (auto& pt : m_points) {
+		pt.position -= m_centroid;
+	}
 }
 
 void Pointcloud::write_point_cloud_to_buffer(/*const k4a::image point_cloud, int point_count*/)
 {
-	/*
-	const int width = point_cloud.get_width_pixels();
-	const int height = point_cloud.get_height_pixels();
-
-	k4a_float3_t* point_cloud_data = (k4a_float3_t*)point_cloud.get_buffer();
-	
-	std::vector<float> vertexData;
-
-	for (int i = 0; i < width * height; i++) {
-
-		// x
-		vertexData.push_back((float)-point_cloud_data[i].xyz.x);
-		// y
-		vertexData.push_back((float)point_cloud_data[i].xyz.z);
-		// z
-		vertexData.push_back((float)-point_cloud_data[i].xyz.y);
-
-		// r
-		vertexData.push_back(1.f);
-		// g
-		vertexData.push_back(0.f);
-		// b
-		vertexData.push_back(0.f);
-
-	}
-
-	m_pointcount = static_cast<int>(vertexData.size() / (sizeof(PointAttributes) / sizeof(float)));
-	*/
-
-
 	wgpu::BufferDescriptor bufferDesc{};
 	bufferDesc.size = m_points.size() * sizeof(PointAttributes);
 	bufferDesc.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Vertex;
@@ -353,3 +316,4 @@ void Pointcloud::write_point_cloud_to_buffer(/*const k4a::image point_cloud, int
 	Logger::log(std::format("Point buffer: {}", (void*)m_gpu_buffer));
 	Logger::log(std::format("Point count: {}", m_points.size()));
 }
+

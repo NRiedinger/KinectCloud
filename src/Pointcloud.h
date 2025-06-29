@@ -56,6 +56,10 @@ public:
 		return m_is_colmap;
 	}
 
+	inline glm::vec3 centroid() {
+		return m_centroid;
+	}
+
 private:
 	void capture_point_cloud();
 	void create_xy_table(const k4a::calibration* calibration, k4a::image xy_table);
@@ -76,6 +80,7 @@ private:
 	glm::mat4* m_transform = nullptr;
 	glm::quat m_cam_orientation = glm::quat();
 	float m_furthest_point = 1.f;
+	glm::vec3 m_centroid = glm::vec3(0.f);
 
 	// points
 	std::vector<PointAttributes> m_points;

@@ -106,7 +106,7 @@ void CameraCaptureSequence::save_cameras_extrinsics(std::filesystem::path path)
 
 		glm::mat3 rot = glm::mat3(capture->transform);
 		glm::quat q = glm::quat_cast(rot);
-		glm::vec3 t = glm::vec3(capture->transform[3]);
+		glm::vec3 t = glm::vec3(capture->transform[3]) - capture->data_pointer->centroid();
 
 		ofs << std::format("{} {} {} {} {} {} {} {} {} {} \n",
 						   capture->id, q.w, q.x, q.y, q.z, t.x, t.y, t.z, 1, file_name);

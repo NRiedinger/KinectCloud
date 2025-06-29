@@ -50,9 +50,7 @@ bool Camera::on_init(wgpu::Device device, wgpu::Queue queue, int k4a_device_idx,
 
 	Logger::log("Started opening k4a device...");
 
-	//m_k4a_device = k4a::device::open(K4A_DEVICE_DEFAULT);
 	m_k4a_device = k4a::device::open(k4a_device_idx);
-	//m_k4a_device = k4a_device.handle();
 	if (!m_k4a_device) {
 		Logger::log("Could not create k4a device!", LoggingSeverity::Error);
 		return false;

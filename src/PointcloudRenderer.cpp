@@ -624,7 +624,7 @@ void PointcloudRenderer::on_frame()
 
 		// glm::mat4 model = glm::scale(*pc->get_transform_ptr(), glm::vec3(100.f / get_futhest_point()));
 		glm::mat4 model = glm::scale(*pc->get_transform_ptr(), glm::vec3(1.f));
-		glm::quat cam_orienation = pc->camera_orienation();
+		/*glm::quat cam_orienation = pc->camera_orienation();
 
 		glm::vec3 world_up = glm::vec3(0.f, 0.f, 1.f);
 		glm::vec3 camera_up = cam_orienation * world_up;
@@ -638,10 +638,13 @@ void PointcloudRenderer::on_frame()
 		else {
 			leveling = glm::angleAxis(angle, glm::normalize(axis));
 		}
-		glm::mat4 leveled_model = glm::toMat4(leveling) * model;
+		glm::mat4 leveled_model = glm::toMat4(leveling) * model;*/
 
 		uint32_t ubo_offset = sizeof(glm::mat4) * i;
-		m_queue.writeBuffer(m_transform_buffer, ubo_offset, &leveled_model, sizeof(glm::mat4));
+
+		// not using leveled model matrix for now (issues)
+		//m_queue.writeBuffer(m_transform_buffer, ubo_offset, &leveled_model, sizeof(glm::mat4));
+		m_queue.writeBuffer(m_transform_buffer, ubo_offset, &model, sizeof(glm::mat4));
 
 		passEncoder.setPipeline(m_renderpipeline);
 		passEncoder.setVertexBuffer(0, pc->pointbuffer(), 0, pc->pointbuffer().getSize());

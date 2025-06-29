@@ -55,22 +55,6 @@ void Application::on_finish()
 
 void Application::on_frame()
 {
-	/*std::chrono::system_clock::time_point time_point_begin = std::chrono::system_clock::now();
-	std::chrono::system_clock::time_point time_point_end = std::chrono::system_clock::now();
-
-	time_point_begin = std::chrono::system_clock::now();
-	std::chrono::duration<double, std::milli > work_time = time_point_begin - time_point_end;
-
-	auto frametime_s = 1000.f / FPS;
-	if (work_time.count() < frametime_s) {
-		std::chrono::duration<double, std::milli> delta_ms(frametime_s - work_time.count());
-		auto delta_ms_duration = std::chrono::duration_cast<std::chrono::milliseconds>(delta_ms);
-		std::this_thread::sleep_for(std::chrono::milliseconds(delta_ms_duration.count()));
-	}
-	time_point_end = std::chrono::system_clock::now();
-	std::chrono::duration<double, std::milli> sleep_time = time_point_end - time_point_begin;*/
-
-
 	if (!m_window) {
 		throw std::exception("Attempted to use uninitialized window!");
 	}
@@ -606,9 +590,9 @@ void Application::render_capture_menu()
 
 				glm::vec3 rotation_deg = Helper::quat_to_euler_degrees(rotation_rad);
 
-				ImGui::SliderFloat3("Position", &translation.x, -10.f, 10.f);
-				ImGui::SliderFloat3("Rotation", &rotation_deg.x, -180.f, 180.f);
-				ImGui::SliderFloat("Scale", &scale.x, .1f, 100.f);
+				ImGui::DragFloat3("Position", &translation.x, 1.f, -100.f, 100.f);
+				ImGui::DragFloat3("Rotation", &rotation_deg.x, 1.f, -180.f, 180.f);
+				ImGui::DragFloat("Scale", &scale.x, 1.f, .1f, 100.f);
 
 				glm::mat4 new_transform = glm::translate(glm::mat4(1.f), translation) *
 					glm::toMat4(Helper::euler_degrees_to_quat(rotation_deg)) *
@@ -753,7 +737,6 @@ void Application::render_capture_menu()
 		}
 
 		if (ImGui::Button("Export")) {
-			//m_renderer.write_points3D(EXPORT_DIR);
 			export_for_3dgs();
 		}
 	}
@@ -771,17 +754,7 @@ void Application::render_debug()
 		ImGui::Text("Number of captures: %d", m_capture_sequence.captures().size());
 		ImGui::Text("Number of pointclouds: %d", m_renderer.get_num_pointclouds());
 		ImGui::Text("Number of points: %d", m_renderer.get_num_vertices());
-		//ImGui::TextUnformatted(std::format("Delta transform: \n{}", Util::mat4_to_string(m_camera.delta_transform())).c_str());
 
-		/*glm::vec3 scale, translation, skew;
-		glm::vec4 perspective;
-		glm::quat rotation_rad;
-		glm::decompose(m_camera.delta_transform(), scale, rotation_rad, translation, skew, perspective);
-
-		glm::vec3 rotation_deg = Util::quat_to_euler_degrees(rotation_rad);
-		ImGui::Text(std::format("{}", rotation_deg.x).c_str());
-		ImGui::Text(std::format("{}", rotation_deg.y).c_str());
-		ImGui::Text(std::format("{}", rotation_deg.z).c_str());*/
 		if (ImGui::Button("Reload Shader")) {
 			m_renderer.reload_renderpipeline();
 		}
