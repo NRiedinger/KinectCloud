@@ -36,10 +36,6 @@ public:
 		*m_transform = trans_mat;
 	}
 
-	inline glm::quat camera_orienation() {
-		return m_cam_orientation;
-	}
-
 	inline float furthest_point() {
 		return m_furthest_point;
 	}
@@ -60,13 +56,17 @@ public:
 		return m_centroid;
 	}
 
+	inline k4a::calibration calibration() {
+		return m_calibration;
+	}
+
 private:
 	void capture_point_cloud();
 	void create_xy_table(const k4a::calibration* calibration, k4a::image xy_table);
 	void generate_point_cloud(const k4a::image xy_table, k4a::image point_cloud, const k4a::image transformed_color_image, int* point_count);
 	void write_point_cloud_to_buffer();
 
-private:
+public:
 	bool m_is_initialized = false;
 	bool m_is_colmap = false;
 	glm::vec3 m_color = { 1.f, 1.f, 1.f };

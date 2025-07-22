@@ -203,7 +203,7 @@ void PointcloudRenderer::align_pointclouds(int max_iter, float max_corr_dist, Po
 		auto transform = eigen_to_glm(icp.getFinalTransformation());
 		Logger::log(std::format("Transformationmatrix:\n{}", Helper::mat4_to_string(transform)));
 
-		target->set_transform(transform);
+		source->set_transform(transform);
 	}
 	else {
 		Logger::log("ICP failed to converge.", LoggingSeverity::Warning);
@@ -585,8 +585,8 @@ void PointcloudRenderer::write_points3D(std::filesystem::path path)
 			// id
 			ofs << id++ << " ";
 			// pos
-			//ofs << p.position.x << " " << p.position.y << " " << p.position.z << " ";
-			ofs << p.position.x / 1000.f << " " << p.position.y / 1000.f << " " << p.position.z / 1000.f << " ";
+			ofs << p.position.x << " " << p.position.y << " " << p.position.z << " ";
+			//ofs << p.position.x / 1000.f << " " << p.position.y / 1000.f << " " << p.position.z / 1000.f << " ";
 			// color
 			ofs << static_cast<int>(p.color.r * 255) << " " << static_cast<int>(p.color.g * 255) << " " << static_cast<int>(p.color.b * 255) << " ";
 			// error
@@ -604,6 +604,15 @@ Uniforms::RenderUniforms& PointcloudRenderer::uniforms()
 	return m_renderuniforms;
 }
 
+float& PointcloudRenderer::frustum_size()
+{
+	return m_render_frustum_size;
+}
+
+float& PointcloudRenderer::frustum_dist()
+{
+	return m_render_frustum_dist;
+}
 
 void PointcloudRenderer::on_frame()
 {
@@ -714,6 +723,10 @@ void PointcloudRenderer::on_frame()
 	handle_pointcloud_mouse_events();
 
 	draw_gizmos();
+
+	for (auto pc : m_pointclouds) {
+		draw_camera(pc);
+	}
 	
 
 	ImGui::End();
@@ -761,4 +774,101 @@ void PointcloudRenderer::terminate_depthbuffer()
 	m_depthtexture_view.release();
 	m_depthtexture.destroy();
 	m_depthtexture.release();
+}
+
+void PointcloudRenderer::draw_camera(Pointcloud* pc) {
+
+
+	/*glm::vec3 local_cam_pos = { 0.f, 0.f, 0.f };
+	glm::vec3 local_cam_forward = { 0.f, 1.f, 0.f };
+
+	local_cam_pos -= pc->centroid();
+	local_cam_forward -= pc->centroid();
+
+	glm::vec4 world_cam_pos = transform * glm::vec4(local_cam_pos, 1.f);
+	glm::vec4 world_cam_forward = transform * glm::vec4(local_cam_forward, 1.f);*/
+
+	/*auto drawlist = ImGui::GetWindowDrawList();
+
+	drawlist->AddLine(project(glm::vec3(world_cam_pos)), project(glm::vec3(world_cam_forward)), IM_COL32(255, 255, 255, 255));*/
+
+
+	//auto intrinsics = pc->calibration().depth_camera_calibration;
+	//float fx = intrinsics.intrinsics.parameters.param.fx;
+	//float fy = intrinsics.intrinsics.parameters.param.fy;
+	//float cx = intrinsics.intrinsics.parameters.param.cx;
+	//float cy = intrinsics.intrinsics.parameters.param.cy;
+	//int img_width = intrinsics.resolution_width;
+	//int img_height = intrinsics.resolution_height;
+
+	//float z = 1.f;
+
+
+	//glm::mat3 K_inv = glm::inverse(glm::mat3(
+	//	fx, 0.f, 0.f,
+	//	0.f, fy, 0.f,
+	//	cx, cy, 1.f
+	//));
+
+	//glm::vec3 tl = glm::vec3(0, 0, 1);
+	//glm::vec3 tr = glm::vec3(img_width, 0, 1);
+	//glm::vec3 bl = glm::vec3(0, img_height, 1);
+	//glm::vec3 br = glm::vec3(img_width, img_height, 1);
+
+
+
+	//glm::vec3 top_left = z * (K_inv * tl) - pc->centroid();
+	//glm::vec3 top_right = z * (K_inv * tr) - pc->centroid();
+	//glm::vec3 bottom_left = z * (K_inv * bl) - pc->centroid();
+	//glm::vec3 bottom_right = z * (K_inv * br) - pc->centroid();
+	//glm::vec3 cam_origin = glm::vec3(0, 0, 0) - pc->centroid();
+
+	//glm::mat4 transform = *pc->get_transform_ptr();
+
+	//glm::vec3 cam_origin_w = glm::vec3(transform * glm::vec4(cam_origin, 1.f));
+	//glm::vec3 tl_w = glm::vec3(transform * glm::vec4(top_left, 1.f));
+	//glm::vec3 tr_w = glm::vec3(transform * glm::vec4(top_right, 1.f));
+	//glm::vec3 bl_w = glm::vec3(transform * glm::vec4(bottom_left, 1.f));
+	//glm::vec3 br_w = glm::vec3(transform * glm::vec4(bottom_right, 1.f));
+
+
+	//ImU32 color = IM_COL32(255, 255, 255, 255);
+
+	//auto drawlist = ImGui::GetWindowDrawList();
+	//drawlist->AddLine(project(cam_origin_w), project(tl_w), color);
+	//drawlist->AddLine(project(cam_origin_w), project(tr_w), color);
+	//drawlist->AddLine(project(cam_origin_w), project(bl_w), color);
+	//drawlist->AddLine(project(cam_origin_w), project(br_w), color);
+
+	glm::mat4 transform = *pc->get_transform_ptr();
+
+	float frustum_dist = m_render_frustum_dist;
+	float frustum_size = m_render_frustum_size;
+
+	glm::vec3 cam_origin_local = glm::vec3(0.f, 0.f, 0.f) - pc->centroid();
+	glm::vec3 top_left_local = glm::vec3(-frustum_size, frustum_dist, frustum_size) - pc->centroid();
+	glm::vec3 top_right_local = glm::vec3(frustum_size, frustum_dist, frustum_size) - pc->centroid();
+	glm::vec3 bottom_left_local = glm::vec3(-frustum_size, frustum_dist, -frustum_size) - pc->centroid();
+	glm::vec3 bottom_right_local = glm::vec3(frustum_size, frustum_dist, -frustum_size) - pc->centroid();
+
+	glm::vec3 cam_origin_w = glm::vec3(transform * glm::vec4(cam_origin_local, 1.f));
+	glm::vec3 top_left_w = glm::vec3(transform * glm::vec4(top_left_local, 1.f));
+	glm::vec3 top_right_w = glm::vec3(transform * glm::vec4(top_right_local, 1.f));
+	glm::vec3 bottom_left_w = glm::vec3(transform * glm::vec4(bottom_left_local, 1.f));
+	glm::vec3 bottom_right_w = glm::vec3(transform * glm::vec4(bottom_right_local, 1.f));
+
+	ImU32 color = IM_COL32(255, 255, 255, 255);
+	auto drawlist = ImGui::GetWindowDrawList();
+
+	drawlist->AddLine(project(cam_origin_w), project(top_left_w), color);
+	drawlist->AddLine(project(cam_origin_w), project(top_right_w), color);
+	drawlist->AddLine(project(cam_origin_w), project(bottom_left_w), color);
+	drawlist->AddLine(project(cam_origin_w), project(bottom_right_w), color);
+
+	ImVec2 p1 = project(top_left_w);
+	ImVec2 p2 = project(top_right_w);
+	ImVec2 p3 = project(bottom_right_w);
+	ImVec2 p4 = project(bottom_left_w);
+
+	drawlist->AddQuadFilled(p1, p2, p3, p4, color);
 }

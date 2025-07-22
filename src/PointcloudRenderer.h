@@ -36,6 +36,8 @@ public:
 	void write_points3D(std::filesystem::path path);
 
 	Uniforms::RenderUniforms& uniforms();
+	float& frustum_size();
+	float& frustum_dist();
 
 private:
 	bool init_rendertarget();
@@ -58,18 +60,22 @@ private:
 	void update_viewmatrix();
 	void handle_pointcloud_mouse_events();
 
-	void draw_gizmos() {
-		static auto project = [this](glm::vec3 p) -> ImVec2 {
-			auto screen_pos = Helper::project_point(m_renderuniforms.projection_mat, m_renderuniforms.view_mat, p, (float)m_width, (float)m_height);
-			return { GUI_MENU_WIDTH + screen_pos.x, screen_pos.y };
-		};
+	void draw_camera(Pointcloud* pc);
 
+	ImVec2 project(glm::vec3 p) {
+		auto screen_pos = Helper::project_point(m_renderuniforms.projection_mat, m_renderuniforms.view_mat, p, (float)m_width, (float)m_height);
+		return { GUI_MENU_WIDTH + screen_pos.x, screen_pos.y };
+	}
+
+	void draw_gizmos() {
 		auto drawlist = ImGui::GetWindowDrawList();
 
 		drawlist->AddLine(project({ 0.f, 0.f, 0.f }), project({ 10.f, 0.f, 0.f }), IM_COL32(255, 0, 0, 255));
 		drawlist->AddLine(project({ 0.f, 0.f, 0.f }), project({ 0.f, 10.f, 0.f }), IM_COL32(0, 255, 0, 255));
 		drawlist->AddLine(project({ 0.f, 0.f, 0.f }), project({ 0.f, 0.f, 10.f }), IM_COL32(0, 0, 255, 255));
 	}
+
+	
 
 private:
 	std::vector<Pointcloud*> m_pointclouds;
@@ -78,6 +84,9 @@ private:
 	bool m_initialized = false;
 	int m_width;
 	int m_height;
+
+	float m_render_frustum_size = 1.f;
+	float m_render_frustum_dist = 1.f;
 
 	wgpu::Device m_device = nullptr;
 	wgpu::Queue m_queue = nullptr;

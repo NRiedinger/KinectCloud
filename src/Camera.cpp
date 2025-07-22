@@ -174,7 +174,7 @@ void Camera::on_frame()
 	ImGui::SetCursorPos({ (viewport_dims.x - image_dims.x) * .5f + 7, (viewport_dims.y - image_dims.y) * .5f + 7 });
 	ImGui::Image((ImTextureID)(intptr_t)m_color_texture.view(), image_dims);
 
-	draw_gizmos();
+	// draw_gizmos();
 
 	ImGui::End();
 }

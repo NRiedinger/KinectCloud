@@ -123,19 +123,20 @@ void CameraCaptureSequence::save_cameras_extrinsics(std::filesystem::path path)
 
 		std::string file_name = std::format("{}.png", capture->name);
 
-		/*glm::mat4 trans_mat_inv = glm::inverse(capture->transform);
+		glm::mat4 trans_mat_inv = glm::inverse(capture->transform);
 		glm::mat3 rot = glm::mat3(trans_mat_inv);
 		glm::quat q = glm::quat_cast(rot);
-		glm::vec3 t = glm::vec3(trans_mat_inv[3]);*/
+		glm::vec3 t = glm::vec3(trans_mat_inv[3])/* - capture->data_pointer->centroid()*/;
 
-		glm::mat3 rot = glm::mat3(capture->transform);
+		/*glm::mat3 rot = glm::mat3(capture->transform);
 		glm::quat q = glm::quat_cast(rot);
-		glm::vec3 t = glm::vec3(capture->transform[3]) - capture->data_pointer->centroid();
+		glm::vec3 t = glm::vec3(capture->transform[3]) - capture->data_pointer->centroid();*/
 
 		ofs << std::format("{} {} {} {} {} {} {} {} {} {} \n",
-						   capture->id, q.w, q.x, q.y, q.z, t.x, t.y, t.z, 1, file_name);
+						   capture->id, q.w, q.x, q.y, q.z, t.x, t.y, t.z/*-t.x, -t.z, t.y*/, 1, file_name);
 
 		ofs << "0.0 0.0 -1 \n";
+		//ofs << "\n";
 	}
 
 	ofs.close();
