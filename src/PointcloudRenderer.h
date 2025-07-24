@@ -39,6 +39,8 @@ public:
 	float& frustum_size();
 	float& frustum_dist();
 
+	void draw_camera(Pointcloud* pc, ImU32 color);
+
 private:
 	bool init_rendertarget();
 	void terminate_rendertarget();
@@ -59,8 +61,6 @@ private:
 	void update_projectionmatrix();
 	void update_viewmatrix();
 	void handle_pointcloud_mouse_events();
-
-	void draw_camera(Pointcloud* pc);
 
 	ImVec2 project(glm::vec3 p) {
 		auto screen_pos = Helper::project_point(m_renderuniforms.projection_mat, m_renderuniforms.view_mat, p, (float)m_width, (float)m_height);

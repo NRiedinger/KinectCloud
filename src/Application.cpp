@@ -110,6 +110,10 @@ void Application::capture()
 
 	capture->preview_image = Texture(m_device, m_queue, nullptr, 0, capture->color_image.get_width_pixels(), capture->color_image.get_height_pixels(), wgpu::TextureFormat::BGRA8Unorm);
 	capture->preview_image.update(reinterpret_cast<const BgraPixel*>(capture->color_image.get_buffer()));
+
+	auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
+	pc->load_from_capture(capture->depth_image, capture->color_image, capture->calibration);
+	capture->data_pointer = m_renderer.add_pointcloud(pc);
 	
 	m_capture_sequence.add_capture(capture);
 	CameraCaptureSequence::s_capturelist_updated = true;
@@ -171,7 +175,7 @@ void Application::export_for_3dgs()
 	std::filesystem::create_directories(current_export_dir + "/sparse/0");
 
 	// save images
-	m_capture_sequence.save_images(current_export_dir + "/images", true);
+	m_capture_sequence.save_images(current_export_dir + "/images");
 
 	// points3D.txt
 	m_renderer.write_points3D(current_export_dir + "/sparse/0");
@@ -181,6 +185,12 @@ void Application::export_for_3dgs()
 
 	// images.txt
 	m_capture_sequence.save_cameras_extrinsics(current_export_dir + "/sparse/0");
+
+	std::string colmap_bin_path = TOOLS_DIR "/colmap-x64-windows-nocuda/COLMAP.bat";
+	std::string sparse_path = current_export_dir + "/sparse/0";
+	
+	std::string cmd_model_converter = std::format("\"\"{}\" model_converter --input_path \"{}\" --output_path \"{}\" --output_type BIN\"", colmap_bin_path, sparse_path, sparse_path);
+	std::system(cmd_model_converter.c_str());
 }
 
 bool Application::init_window_and_device()
@@ -383,8 +393,12 @@ bool Application::init_gui()
 	}
 
 	m_save_dialog = ImGui::FileBrowser(ImGuiFileBrowserFlags_SelectDirectory | ImGuiFileBrowserFlags_CreateNewDir | ImGuiFileBrowserFlags_HideRegularFiles | ImGuiFileBrowserFlags_ConfirmOnEnter);
-	m_save_dialog.SetTitle("Select directory to save (must be empty)");
+	m_save_dialog.SetTitle("Select empty directory to save captures");
 	m_save_dialog.SetDirectory(CAPTURE_DIR);
+
+	m_saveimages_dialog = ImGui::FileBrowser(ImGuiFileBrowserFlags_SelectDirectory | ImGuiFileBrowserFlags_CreateNewDir | ImGuiFileBrowserFlags_HideRegularFiles | ImGuiFileBrowserFlags_ConfirmOnEnter);
+	m_saveimages_dialog.SetTitle("Select empty directory to save images");
+	m_saveimages_dialog.SetDirectory(CAPTURE_DIR);
 
 	m_load_dialog = ImGui::FileBrowser(ImGuiFileBrowserFlags_MultipleSelection | ImGuiFileBrowserFlags_ConfirmOnEnter);
 	m_load_dialog.SetTitle("Select captures to load");
@@ -485,6 +499,7 @@ void Application::render_capture_menu()
 		if (ImGui::Button("Save")) {
 			m_save_dialog.Open();
 		}
+		
 		m_save_dialog.Display();
 
 		if (m_save_dialog.HasSelected()) {
@@ -507,6 +522,26 @@ void Application::render_capture_menu()
 
 	ImGui::SameLine();
 
+	if (ImGui::Button("Save Images")) {
+		m_saveimages_dialog.Open();
+	}
+
+	m_saveimages_dialog.Display();
+
+	if (m_saveimages_dialog.HasSelected()) {
+		auto selected_path = m_save_dialog.GetSelected();
+		if (std::filesystem::exists(selected_path)) {
+			m_capture_sequence.save_images(selected_path, true);
+		}
+		else {
+			Logger::log(std::format("Failed to save images to {}.", selected_path.string()), LoggingSeverity::Error);
+		}
+
+		m_saveimages_dialog.ClearSelected();
+	}
+
+	ImGui::SameLine();
+
 	if (ImGui::Button("Load")) {
 		m_load_dialog.Open();
 	}
@@ -520,6 +555,10 @@ void Application::render_capture_menu()
 			for (auto& capture : m_capture_sequence.captures()) {
 				capture->preview_image = Texture(m_device, m_queue, nullptr, 0, capture->color_image.get_width_pixels(), capture->color_image.get_height_pixels(), wgpu::TextureFormat::BGRA8Unorm);
 				capture->preview_image.update(reinterpret_cast<const BgraPixel*>(capture->color_image.get_buffer()));
+
+				auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
+				pc->load_from_capture(capture->depth_image, capture->color_image, capture->calibration);
+				capture->data_pointer = m_renderer.add_pointcloud(pc);
 			}
 		}
 		else {
@@ -527,6 +566,18 @@ void Application::render_capture_menu()
 		}
 
 		m_load_dialog.ClearSelected();
+	}
+
+	ImGui::SameLine();
+
+	ImGui::SetCursorPosX(GUI_MENU_WIDTH - 65.f);
+	if (ImGui::Button("Clear")) {
+		for (auto capture : m_capture_sequence.captures()) {
+			delete capture;
+		}
+		m_capture_sequence.captures().clear();
+
+		m_renderer.clear_pointclouds();
 	}
 
 	ImGui::Separator();
@@ -541,28 +592,20 @@ void Application::render_capture_menu()
 
 		if (!capture->is_colmap && ImGui::Checkbox("##Select", &capture->is_selected)) {
 			if (capture->is_selected) {
-				if (m_renderer.get_num_pointclouds() < POINTCLOUD_MAX_NUM) {
-					auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
-					pc->set_color(Helper::get_pc_color_by_index(i));
-					pc->load_from_capture(capture->depth_image, capture->color_image, capture->calibration, capture->camera_orientation);
-					capture->data_pointer = m_renderer.add_pointcloud(pc);
-					capture->is_selected = true;
-
-				}
-				else {
-					Logger::log(std::format("Maximum number of pointclouds reached ({})", POINTCLOUD_MAX_NUM), LoggingSeverity::Error);
+				auto pc = capture->data_pointer;
+				if (pc != nullptr) {
+					pc->m_loaded = true;
 				}
 			}
 			else {
-				to_remove = capture->data_pointer;
-				capture->is_selected = false;
+				capture->data_pointer->m_loaded = false;
 			}
 		}
 
 		ImGui::SameLine();
 		ImGui::Text(std::format("Capture \"{}\"", capture->name).c_str());
 
-		if (m_app_state == AppState::Pointcloud && capture->is_selected) {
+		if (m_app_state == AppState::Pointcloud) {
 			bool current_capture_is_selected = m_selected_edit_idx == i;
 			if (current_capture_is_selected)
 				ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered));
@@ -631,15 +674,6 @@ void Application::render_capture_menu()
 	if (m_app_state == AppState::Capture && m_camera.is_initialized()) {
 		if (ImGui::Button("Capture [space]", ImVec2(ImGui::GetContentRegionAvail().x, 40)) || ImGui::IsKeyPressed(ImGuiKey_Space)) {
 			capture();
-		}
-
-		if (ImGui::Button("Reset")) {
-			for (auto capture : m_capture_sequence.captures()) {
-				delete capture;
-			}
-			m_capture_sequence.captures().clear();
-
-			m_renderer.clear_pointclouds();
 		}
 
 		ImGui::SameLine();
@@ -793,9 +827,29 @@ void Application::render_content()
 			break;
 
 		case AppState::Pointcloud:
+		{
 			m_renderer.on_frame();
-			break;
+			int i = 0;
+			ImGui::Begin(GUI_WINDOW_POINTCLOUD_TITLE, nullptr, GUI_WINDOW_POINTCLOUD_FLAGS);
 
+			for (auto& capture : m_capture_sequence.captures()) {
+				if (capture->data_pointer != nullptr) {
+					ImU32 color = IM_COL32(255, 255, 255, 255);
+					if (m_selected_edit_idx > -1) {
+						if (i != m_selected_edit_idx)
+							color = IM_COL32(255, 255, 255, 150);
+						else
+							color = IM_COL32(45, 255, 230, 255);
+					}
+
+					m_renderer.draw_camera(capture->data_pointer, color);
+				}
+				i++;
+			}
+			ImGui::End();
+
+			break;
+		}
 		case AppState::Default:
 		default:
 			break;
@@ -899,9 +953,6 @@ void Application::render_edit_menu()
 	
 
 	auto& capture = m_capture_sequence.captures().at(m_selected_edit_idx);
-
-	if (!capture->is_selected)
-		return;
 
 	
 	if (!m_render_menu_open) {

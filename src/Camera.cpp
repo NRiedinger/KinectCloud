@@ -348,7 +348,7 @@ void Camera::save_camera_intrinsics(std::filesystem::path path)
 
 	const auto intrinsics = m_calibration.color_camera_calibration.intrinsics;
 
-	int camera_id = 1;
+	/*int camera_id = 1;
 	std::string camera_model = "OPENCV";
 	int width = m_calibration.color_camera_calibration.resolution_width;
 	int height = m_calibration.color_camera_calibration.resolution_height;
@@ -362,7 +362,19 @@ void Camera::save_camera_intrinsics(std::filesystem::path path)
 	float p2 = m_calibration.color_camera_calibration.intrinsics.parameters.param.p2;
 
 	ofs << std::format("{} {} {} {} {} {} {} {} {} {} {} {} \n",
-					   camera_id, camera_model, width, height, fx, fy, cx, cy, k1, k2, p1, p2);
+					   camera_id, camera_model, width, height, fx, fy, cx, cy, k1, k2, p1, p2);*/
+	int camera_id = 1;
+	std::string camera_model = "PINHOLE";
+	int width = m_calibration.color_camera_calibration.resolution_width;
+	int height = m_calibration.color_camera_calibration.resolution_height;
+	float fx = m_calibration.color_camera_calibration.intrinsics.parameters.param.fx;
+	float fy = m_calibration.color_camera_calibration.intrinsics.parameters.param.fy;
+	float cx = m_calibration.color_camera_calibration.intrinsics.parameters.param.cx;
+	float cy = m_calibration.color_camera_calibration.intrinsics.parameters.param.cy;
+
+
+	ofs << std::format("{} {} {} {} {} {} {} {} \n",
+					   camera_id, camera_model, width, height, fx, fy, cx, cy);
 
 	ofs.close();
 }

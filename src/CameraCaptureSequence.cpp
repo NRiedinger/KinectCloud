@@ -59,7 +59,7 @@ std::vector<std::string> CameraCaptureSequence::get_capturenames()
 }
 
 
-void CameraCaptureSequence::save_images(std::filesystem::path images_dir_path, bool only_selected)
+void CameraCaptureSequence::save_images(std::filesystem::path images_dir_path, bool with_timestamp)
 {
 	if (!std::filesystem::exists(images_dir_path)) {
 		// if directory does not exist, create it
@@ -68,17 +68,18 @@ void CameraCaptureSequence::save_images(std::filesystem::path images_dir_path, b
 	}
 	else {
 		// if directory exists, delete all previous images
-		for (const auto& file : std::filesystem::directory_iterator(images_dir_path)) {
-			std::filesystem::remove_all(file.path());
-		}
+		//for (const auto& file : std::filesystem::directory_iterator(images_dir_path)) {
+		//	std::filesystem::remove_all(file.path());
+		//}
 	}
+
+	std::string datetimestring = Helper::get_current_time_string();
 	
 	int i = 0;
 	for (auto& capture : m_captures) {
 		std::string path = std::format("{}/{}.png", images_dir_path.string(), capture->name);
-
-		if (!capture->is_selected && only_selected) {
-			continue;
+		if (with_timestamp) {
+			path = std::format("{}/{}_{}.png", images_dir_path.string(), datetimestring, capture->name);
 		}
 
 		auto color_image_converted = Helper::convert_bgra_to_rgba(capture->color_image);
@@ -117,9 +118,9 @@ void CameraCaptureSequence::save_cameras_extrinsics(std::filesystem::path path)
 			continue;
 		}
 
-		if (!capture->is_selected) {
+		/*if (!capture->is_selected) {
 			continue;
-		}
+		}*/
 
 		std::string file_name = std::format("{}.png", capture->name);
 
@@ -132,8 +133,20 @@ void CameraCaptureSequence::save_cameras_extrinsics(std::filesystem::path path)
 		glm::quat q = glm::quat_cast(rot);
 		glm::vec3 t = glm::vec3(capture->transform[3]) - capture->data_pointer->centroid();*/
 
+		/*float tx = t.x * 1000.f;
+		float ty = t.y * 1000.f;
+		float tz = t.z * 1000.f;*/
+
+		/*float tx = -t.x * 1000.f;
+		float ty = -t.z * 1000.f;
+		float tz = t.y * 1000.f;*/
+
+		float tx = -t.x;
+		float ty = -t.z;
+		float tz = t.y;
+
 		ofs << std::format("{} {} {} {} {} {} {} {} {} {} \n",
-						   capture->id, q.w, q.x, q.y, q.z, t.x, t.y, t.z/*-t.x, -t.z, t.y*/, 1, file_name);
+						   capture->id, q.w, q.x, q.y, q.z, tx, ty, tz, 1, file_name);
 
 		ofs << "0.0 0.0 -1 \n";
 		//ofs << "\n";
@@ -174,6 +187,7 @@ bool CameraCaptureSequence::save_sequence(const std::filesystem::path path)
 
 
 		Helper::write_string(ofs, capture->name);
+		Helper::write_binary(ofs, capture->is_selected);
 
 		// depth image
 		int depth_width = capture->depth_image.get_width_pixels();
@@ -218,7 +232,7 @@ bool CameraCaptureSequence::load_sequence(const std::vector<std::filesystem::pat
 
 		capture->id = get_next_id();
 		Helper::read_string(ifs, capture->name);
-		capture->is_selected = false;
+		//Helper::read_binary(ifs, capture->is_selected);
 		capture->is_colmap = false;
 		capture->is_expanded = false;
 

@@ -24,6 +24,9 @@
 #define GUI_MENU_EDIT_WIDTH 400.f
 #define GUI_MENU_EDIT_HEIGHT 300.f
 
+#define GUI_WINDOW_POINTCLOUD_TITLE "Pointcloud Window"
+#define GUI_WINDOW_POINTCLOUD_FLAGS ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoBringToFrontOnFocus
+
 #define POINTCLOUD_CAMERA_PLANE_NEAR .01f
 #define POINTCLOUD_CAMERA_PLANE_FAR 10000.f
 #define POINTCLOUD_MAX_NUM 30

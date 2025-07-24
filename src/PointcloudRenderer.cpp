@@ -575,6 +575,10 @@ void PointcloudRenderer::write_points3D(std::filesystem::path path)
 
 	int id = 1;
 	for (const auto& pc : m_pointclouds) {
+		if (!pc->m_loaded)
+			continue;
+
+
 		for (const auto& p : pc->points()) {
 			if (!std::isfinite(p.position.x) ||
 				!std::isfinite(p.position.y) ||
@@ -661,6 +665,9 @@ void PointcloudRenderer::on_frame()
 	int i = 0;
 	for (auto pc : m_pointclouds) {
 
+		if (!pc->m_loaded)
+			continue;
+
 		// glm::mat4 model = glm::scale(*pc->get_transform_ptr(), glm::vec3(100.f / get_futhest_point()));
 		glm::mat4 model = glm::scale(*pc->get_transform_ptr(), glm::vec3(1.f));
 		/*glm::quat cam_orienation = pc->camera_orienation();
@@ -713,7 +720,7 @@ void PointcloudRenderer::on_frame()
 	encoder.release();
 	m_queue.submit(command);
 
-	ImGui::Begin("Pointcloud Window", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoBringToFrontOnFocus);
+	ImGui::Begin(GUI_WINDOW_POINTCLOUD_TITLE, nullptr, GUI_WINDOW_POINTCLOUD_FLAGS);
 	ImGui::SetWindowPos({ GUI_MENU_WIDTH, 0.f });
 	ImGui::SetWindowSize({ (float)m_width, (float)m_height });
 
@@ -724,9 +731,9 @@ void PointcloudRenderer::on_frame()
 
 	draw_gizmos();
 
-	for (auto pc : m_pointclouds) {
+	/*for (auto pc : m_pointclouds) {
 		draw_camera(pc);
-	}
+	}*/
 	
 
 	ImGui::End();
@@ -776,70 +783,10 @@ void PointcloudRenderer::terminate_depthbuffer()
 	m_depthtexture.release();
 }
 
-void PointcloudRenderer::draw_camera(Pointcloud* pc) {
-
-
-	/*glm::vec3 local_cam_pos = { 0.f, 0.f, 0.f };
-	glm::vec3 local_cam_forward = { 0.f, 1.f, 0.f };
-
-	local_cam_pos -= pc->centroid();
-	local_cam_forward -= pc->centroid();
-
-	glm::vec4 world_cam_pos = transform * glm::vec4(local_cam_pos, 1.f);
-	glm::vec4 world_cam_forward = transform * glm::vec4(local_cam_forward, 1.f);*/
-
-	/*auto drawlist = ImGui::GetWindowDrawList();
-
-	drawlist->AddLine(project(glm::vec3(world_cam_pos)), project(glm::vec3(world_cam_forward)), IM_COL32(255, 255, 255, 255));*/
-
-
-	//auto intrinsics = pc->calibration().depth_camera_calibration;
-	//float fx = intrinsics.intrinsics.parameters.param.fx;
-	//float fy = intrinsics.intrinsics.parameters.param.fy;
-	//float cx = intrinsics.intrinsics.parameters.param.cx;
-	//float cy = intrinsics.intrinsics.parameters.param.cy;
-	//int img_width = intrinsics.resolution_width;
-	//int img_height = intrinsics.resolution_height;
-
-	//float z = 1.f;
-
-
-	//glm::mat3 K_inv = glm::inverse(glm::mat3(
-	//	fx, 0.f, 0.f,
-	//	0.f, fy, 0.f,
-	//	cx, cy, 1.f
-	//));
-
-	//glm::vec3 tl = glm::vec3(0, 0, 1);
-	//glm::vec3 tr = glm::vec3(img_width, 0, 1);
-	//glm::vec3 bl = glm::vec3(0, img_height, 1);
-	//glm::vec3 br = glm::vec3(img_width, img_height, 1);
-
-
-
-	//glm::vec3 top_left = z * (K_inv * tl) - pc->centroid();
-	//glm::vec3 top_right = z * (K_inv * tr) - pc->centroid();
-	//glm::vec3 bottom_left = z * (K_inv * bl) - pc->centroid();
-	//glm::vec3 bottom_right = z * (K_inv * br) - pc->centroid();
-	//glm::vec3 cam_origin = glm::vec3(0, 0, 0) - pc->centroid();
-
-	//glm::mat4 transform = *pc->get_transform_ptr();
-
-	//glm::vec3 cam_origin_w = glm::vec3(transform * glm::vec4(cam_origin, 1.f));
-	//glm::vec3 tl_w = glm::vec3(transform * glm::vec4(top_left, 1.f));
-	//glm::vec3 tr_w = glm::vec3(transform * glm::vec4(top_right, 1.f));
-	//glm::vec3 bl_w = glm::vec3(transform * glm::vec4(bottom_left, 1.f));
-	//glm::vec3 br_w = glm::vec3(transform * glm::vec4(bottom_right, 1.f));
-
-
-	//ImU32 color = IM_COL32(255, 255, 255, 255);
-
-	//auto drawlist = ImGui::GetWindowDrawList();
-	//drawlist->AddLine(project(cam_origin_w), project(tl_w), color);
-	//drawlist->AddLine(project(cam_origin_w), project(tr_w), color);
-	//drawlist->AddLine(project(cam_origin_w), project(bl_w), color);
-	//drawlist->AddLine(project(cam_origin_w), project(br_w), color);
-
+void PointcloudRenderer::draw_camera(Pointcloud* pc, ImU32 color)
+{
+	
+	
 	glm::mat4 transform = *pc->get_transform_ptr();
 
 	float frustum_dist = m_render_frustum_dist;
@@ -857,7 +804,6 @@ void PointcloudRenderer::draw_camera(Pointcloud* pc) {
 	glm::vec3 bottom_left_w = glm::vec3(transform * glm::vec4(bottom_left_local, 1.f));
 	glm::vec3 bottom_right_w = glm::vec3(transform * glm::vec4(bottom_right_local, 1.f));
 
-	ImU32 color = IM_COL32(255, 255, 255, 255);
 	auto drawlist = ImGui::GetWindowDrawList();
 
 	drawlist->AddLine(project(cam_origin_w), project(top_left_w), color);

@@ -12,7 +12,7 @@ public:
 	Pointcloud(wgpu::Device device, wgpu::Queue queue, glm::mat4* transform_ptr);
 	~Pointcloud();
 
-	void load_from_capture(k4a::image depth_image, k4a::image color_image, k4a::calibration calibration, glm::quat cam_orientation);
+	void load_from_capture(k4a::image depth_image, k4a::image color_image, k4a::calibration calibration);
 	void load_from_ply(const std::filesystem::path path, glm::mat4 initial_transform);
 	void load_from_points3D(const std::filesystem::path path);
 
@@ -69,6 +69,7 @@ private:
 public:
 	bool m_is_initialized = false;
 	bool m_is_colmap = false;
+	bool m_loaded = false;
 	glm::vec3 m_color = { 1.f, 1.f, 1.f };
 
 	wgpu::Device m_device = nullptr;

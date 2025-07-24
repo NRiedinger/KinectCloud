@@ -71,6 +71,7 @@ private:
 	
 	// ImGui file dialogs
 	ImGui::FileBrowser m_save_dialog;
+	ImGui::FileBrowser m_saveimages_dialog;
 	ImGui::FileBrowser m_load_dialog;
 
 	wgpu::Device m_device = nullptr;

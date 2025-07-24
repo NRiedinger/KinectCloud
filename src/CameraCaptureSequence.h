@@ -34,7 +34,7 @@ public:
 	void on_terminate();
 	bool is_initialized();
 	std::vector<std::string> get_capturenames();
-	void save_images(std::filesystem::path path, bool only_selected = false);
+	void save_images(std::filesystem::path path, bool with_timestamp = false);
 	void save_cameras_extrinsics(std::filesystem::path path);
 	std::vector<CameraCapture*>& captures();
 	CameraCapture* capture_at_idx(int idx);
@@ -48,9 +48,5 @@ public:
 private:
 	bool m_initialized = false;
 	std::vector<CameraCapture*> m_captures;
-	Texture* m_color_texture_ptr;
-	k4a::image* m_depth_image_ptr;
-	k4a::calibration m_calibration;
-	k4a::device* m_k4a_device_ptr;
 };
 

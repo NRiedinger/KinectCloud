@@ -36,7 +36,7 @@ Pointcloud::~Pointcloud()
 	m_points.clear();
 }
 
-void Pointcloud::load_from_capture(k4a::image depth_image, k4a::image color_image, k4a::calibration calibration, glm::quat cam_orientation)
+void Pointcloud::load_from_capture(k4a::image depth_image, k4a::image color_image, k4a::calibration calibration)
 {
 	m_depth_image = depth_image;
 	m_color_image = color_image;
