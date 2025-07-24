@@ -291,7 +291,7 @@ void Camera::calibrate_sensors()
 void Camera::draw_gizmos()
 {
 	glm::mat4 projection_mat = glm::perspective((float)(45 * M_PI / 180), (float)(m_width / m_height), POINTCLOUD_CAMERA_PLANE_NEAR, POINTCLOUD_CAMERA_PLANE_FAR);
-	glm::mat4 view_mat = glm::lookAt(glm::vec3(10.f), glm::vec3(0.f), glm::vec3(0, 0, 1));
+	glm::mat4 view_mat = glm::lookAt(glm::vec3(10.f), glm::vec3(0.f), VECTOR_UP);
 
 	static auto project = [&](glm::vec3 p) -> ImVec2 {
 

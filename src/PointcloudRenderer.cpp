@@ -511,19 +511,19 @@ void PointcloudRenderer::update_projectionmatrix()
 void PointcloudRenderer::update_viewmatrix()
 {
 	glm::vec3 position = m_camerastate.get_camera_position();
-	m_renderuniforms.view_mat = glm::lookAt(position, glm::vec3(0.f), glm::vec3(0, 0, 1));
+	m_renderuniforms.view_mat = glm::lookAt(position, glm::vec3(0.f), VECTOR_UP);
 	m_queue.writeBuffer(m_renderuniform_buffer, offsetof(Uniforms::RenderUniforms, view_mat), &m_renderuniforms.view_mat, sizeof(Uniforms::RenderUniforms::view_mat));
 }
 
 void PointcloudRenderer::handle_pointcloud_mouse_events()
 {
 	ImVec2 mouse_pos = ImGui::GetMousePos();
-
+	glm::vec2 mouse_vec(mouse_pos.x, mouse_pos.y);
 
 	// drag camera
 	if (ImGui::IsWindowHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left) && !m_dragstate.active) {
 		m_dragstate.active = true;
-		m_dragstate.startMouse = glm::vec2(mouse_pos.x, mouse_pos.y);
+		m_dragstate.startMouse = glm::vec2(mouse_vec);
 		m_dragstate.startCameraState = m_camerastate;
 	}
 	if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
@@ -531,22 +531,34 @@ void PointcloudRenderer::handle_pointcloud_mouse_events()
 	}
 
 	if (m_dragstate.active) {
-		glm::vec2 currentMouse = glm::vec2(mouse_pos.x, mouse_pos.y);
+		glm::vec2 currentMouse = glm::vec2(mouse_vec);
 		glm::vec2 delta = (currentMouse - m_dragstate.startMouse) * m_dragstate.SENSITIVITY;
-		m_camerastate.angles = m_dragstate.startCameraState.angles + delta;
+		//m_camerastate.angles = m_dragstate.startCameraState.angles + delta;
+		m_camerastate.angles.x = m_dragstate.startCameraState.angles.x + delta.y; // pitch (um x)
+		m_camerastate.angles.y = m_dragstate.startCameraState.angles.y - delta.x; // yaw (um -y)
+
 
 		// clamp pitch
-		m_camerastate.angles.y = glm::clamp(m_camerastate.angles.y, -(float)M_PI / 2 + 1e-5f, (float)M_PI / 2 - 1e-5f);
+		//m_camerastate.angles.y = glm::clamp(m_camerastate.angles.y, -(float)M_PI / 2 + 1e-5f, (float)M_PI / 2 - 1e-5f);
+		m_camerastate.angles.x = glm::clamp(m_camerastate.angles.x, -(float)M_PI / 2 + 1e-5f, (float)M_PI / 2 - 1e-5f);
+		// std::cout << glm::degrees(m_camerastate.angles.y) << std::endl;
+		
+		//m_camerastate.angles.y = glm::clamp(m_camerastate.angles.y, glm::radians(-180.f + 1e-5f), glm::radians(0.f - 1e-5f));
 		// clamp yaw
 		
-		float yaw = glm::degrees(m_camerastate.angles.x);
+		/*float yaw = glm::degrees(m_camerastate.angles.x);
 		if (yaw > 360.f) {
 			yaw -= 360.f;
 		}
 		else if (yaw < 0.f) {
 			yaw += 360.f;
 		}
-		m_camerastate.angles.x = glm::radians(yaw);
+		m_camerastate.angles.x = glm::radians(yaw);*/
+		// Normalize yaw (y-Achse)
+		float yaw_deg = glm::degrees(m_camerastate.angles.y);
+		if (yaw_deg > 360.f) yaw_deg -= 360.f;
+		else if (yaw_deg < 0.f) yaw_deg += 360.f;
+		m_camerastate.angles.y = glm::radians(yaw_deg);
 		update_viewmatrix();
 	}
 
@@ -589,7 +601,8 @@ void PointcloudRenderer::write_points3D(std::filesystem::path path)
 			// id
 			ofs << id++ << " ";
 			// pos
-			ofs << p.position.x << " " << p.position.y << " " << p.position.z << " ";
+			ofs << -p.position.x << " " << p.position.y << " " << p.position.z << " ";
+			//ofs << p.position.x << " " << p.position.y << " " << p.position.z << " ";
 			//ofs << p.position.x / 1000.f << " " << p.position.y / 1000.f << " " << p.position.z / 1000.f << " ";
 			// color
 			ofs << static_cast<int>(p.color.r * 255) << " " << static_cast<int>(p.color.g * 255) << " " << static_cast<int>(p.color.b * 255) << " ";
@@ -785,18 +798,22 @@ void PointcloudRenderer::terminate_depthbuffer()
 
 void PointcloudRenderer::draw_camera(Pointcloud* pc, ImU32 color)
 {
-	
-	
 	glm::mat4 transform = *pc->get_transform_ptr();
 
 	float frustum_dist = m_render_frustum_dist;
 	float frustum_size = m_render_frustum_size;
 
 	glm::vec3 cam_origin_local = glm::vec3(0.f, 0.f, 0.f) - pc->centroid();
-	glm::vec3 top_left_local = glm::vec3(-frustum_size, frustum_dist, frustum_size) - pc->centroid();
+	
+	glm::vec3 top_left_local = glm::vec3(-frustum_size, frustum_size, frustum_dist) - pc->centroid();
+	glm::vec3 top_right_local = glm::vec3(frustum_size, frustum_size, frustum_dist) - pc->centroid();
+	glm::vec3 bottom_left_local = glm::vec3(frustum_size, -frustum_size, frustum_dist) - pc->centroid();
+	glm::vec3 bottom_right_local = glm::vec3(-frustum_size, -frustum_size, frustum_dist) - pc->centroid();
+
+	/*glm::vec3 top_left_local = glm::vec3(-frustum_size, frustum_dist, frustum_size) - pc->centroid();
 	glm::vec3 top_right_local = glm::vec3(frustum_size, frustum_dist, frustum_size) - pc->centroid();
 	glm::vec3 bottom_left_local = glm::vec3(-frustum_size, frustum_dist, -frustum_size) - pc->centroid();
-	glm::vec3 bottom_right_local = glm::vec3(frustum_size, frustum_dist, -frustum_size) - pc->centroid();
+	glm::vec3 bottom_right_local = glm::vec3(frustum_size, frustum_dist, -frustum_size) - pc->centroid();*/
 
 	glm::vec3 cam_origin_w = glm::vec3(transform * glm::vec4(cam_origin_local, 1.f));
 	glm::vec3 top_left_w = glm::vec3(transform * glm::vec4(top_left_local, 1.f));
@@ -813,8 +830,8 @@ void PointcloudRenderer::draw_camera(Pointcloud* pc, ImU32 color)
 
 	ImVec2 p1 = project(top_left_w);
 	ImVec2 p2 = project(top_right_w);
-	ImVec2 p3 = project(bottom_right_w);
-	ImVec2 p4 = project(bottom_left_w);
+	ImVec2 p3 = project(bottom_left_w);
+	ImVec2 p4 = project(bottom_right_w);
 
 	drawlist->AddQuadFilled(p1, p2, p3, p4, color);
 }

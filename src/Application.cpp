@@ -558,6 +558,7 @@ void Application::render_capture_menu()
 
 				auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
 				pc->load_from_capture(capture->depth_image, capture->color_image, capture->calibration);
+				pc->m_loaded = true;
 				capture->data_pointer = m_renderer.add_pointcloud(pc);
 			}
 		}
@@ -587,7 +588,7 @@ void Application::render_capture_menu()
 
 	int i = 0;
 	Pointcloud* to_remove = nullptr;
-	for (auto& capture : m_capture_sequence.captures()) {
+	for (auto capture : m_capture_sequence.captures()) {
 		ImGui::PushID(i);
 
 		if (!capture->is_colmap && ImGui::Checkbox("##Select", &capture->is_selected)) {
@@ -649,6 +650,14 @@ void Application::render_capture_menu()
 			ImGui::Image((ImTextureID)(intptr_t)capture->preview_image.view(), image_dims);
 
 			ImGui::EndPopup();
+		}
+
+		ImGui::SameLine();
+		ImGui::SetCursorPosX(GUI_MENU_WIDTH - 50);
+		if (ImGui::Button("x")) {
+			m_renderer.remove_pointcloud(capture->data_pointer);
+			m_capture_sequence.remove_capture(capture);
+			delete capture;
 		}
 
 		ImGui::Separator();
@@ -767,9 +776,15 @@ void Application::render_capture_menu()
 			m_renderer.align_pointclouds(icp_max_iter, icp_max_corr_dist);
 		}*/
 
+		if (!m_camera.is_initialized())
+			ImGui::BeginDisabled();
+
 		if (ImGui::Button("Export")) {
 			export_for_3dgs();
 		}
+
+		if (!m_camera.is_initialized())
+			ImGui::EndDisabled();
 	}
 }
 
@@ -875,8 +890,8 @@ void Application::render_menu()
 			ImGuiExtensions::ButtonColorChanger button_color_changer(ImGuiExtensions::ButtonColor::Green, can_open);
 			if (ImGuiExtensions::K4AButton("Open device", can_open)) {
 				m_camera.on_init(m_device, m_queue, *m_k4a_device_selector.selected_device(), m_window_width - GUI_MENU_WIDTH, m_window_height - GUI_CONSOLE_HEIGHT);
-				if(m_camera.is_initialized())
-					m_app_state = AppState::Capture;
+				/*if(m_camera.is_initialized())
+					m_app_state = AppState::Capture;*/
 			}
 		}
 	}
@@ -951,6 +966,9 @@ void Application::render_edit_menu()
 	if (m_app_state != AppState::Pointcloud)
 		return;
 	
+
+	if (m_selected_edit_idx >= m_capture_sequence.captures().size())
+		return;
 
 	auto& capture = m_capture_sequence.captures().at(m_selected_edit_idx);
 

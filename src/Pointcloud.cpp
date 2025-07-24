@@ -279,9 +279,12 @@ void Pointcloud::generate_point_cloud(const k4a::image xy_table, k4a::image poin
 		PointAttributes point;
 		static float scale = 1.f / 100.f;
 
-		point.position.x = (float)-point_cloud_data[i].xyz.x * scale;
+		/*point.position.x = (float)-point_cloud_data[i].xyz.x * scale;
 		point.position.y = (float)point_cloud_data[i].xyz.z * scale;
-		point.position.z = (float)-point_cloud_data[i].xyz.y * scale;
+		point.position.z = (float)-point_cloud_data[i].xyz.y * scale;*/
+		point.position.x = (float)-point_cloud_data[i].xyz.x * scale;
+		point.position.y = (float)point_cloud_data[i].xyz.y * scale;
+		point.position.z = (float)point_cloud_data[i].xyz.z * scale;
 
 		point.color.r = r / 255.f;
 		point.color.g = g / 255.f;
@@ -299,7 +302,7 @@ void Pointcloud::generate_point_cloud(const k4a::image xy_table, k4a::image poin
 	}
 }
 
-void Pointcloud::write_point_cloud_to_buffer(/*const k4a::image point_cloud, int point_count*/)
+void Pointcloud::write_point_cloud_to_buffer()
 {
 	wgpu::BufferDescriptor bufferDesc{};
 	bufferDesc.size = m_points.size() * sizeof(PointAttributes);

@@ -142,8 +142,8 @@ void CameraCaptureSequence::save_cameras_extrinsics(std::filesystem::path path)
 		float tz = t.y * 1000.f;*/
 
 		float tx = -t.x;
-		float ty = -t.z;
-		float tz = t.y;
+		float ty = t.y;
+		float tz = t.z;
 
 		ofs << std::format("{} {} {} {} {} {} {} {} {} {} \n",
 						   capture->id, q.w, q.x, q.y, q.z, tx, ty, tz, 1, file_name);
@@ -169,6 +169,14 @@ CameraCapture* CameraCaptureSequence::capture_at_idx(int idx)
 void CameraCaptureSequence::add_capture(CameraCapture* capture)
 {
 	m_captures.push_back(capture);
+}
+
+void CameraCaptureSequence::remove_capture(CameraCapture* capture)
+{
+	m_captures.erase(
+		std::remove(m_captures.begin(), m_captures.end(), capture),
+		m_captures.end()
+	);
 }
 
 bool CameraCaptureSequence::save_sequence(const std::filesystem::path path)
@@ -232,7 +240,7 @@ bool CameraCaptureSequence::load_sequence(const std::vector<std::filesystem::pat
 
 		capture->id = get_next_id();
 		Helper::read_string(ifs, capture->name);
-		//Helper::read_binary(ifs, capture->is_selected);
+		Helper::read_binary(ifs, capture->is_selected);
 		capture->is_colmap = false;
 		capture->is_expanded = false;
 

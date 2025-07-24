@@ -31,6 +31,8 @@
 #define POINTCLOUD_CAMERA_PLANE_FAR 10000.f
 #define POINTCLOUD_MAX_NUM 30
 
+#define VECTOR_UP glm::vec3(0.f, -1.f, 0.f)
+
 #define POINTCLOUD_COLOR_RESOLUTION K4A_COLOR_RESOLUTION_1080P
 #define POINTCLOUD_DEPTH_MODE K4A_DEPTH_MODE_WFOV_2X2BINNED
 
@@ -83,17 +85,35 @@ struct PointAttributes {
 };
 
 struct CameraState {
-	glm::vec2 angles = { .8f, .5f };
+	glm::vec2 angles = { glm::radians(0.f), glm::radians(180.f)};
 	float zoom = -5.f;
 	
 
 	glm::vec3 get_camera_position() {
-		float cx = cos(angles.x);
-		float sx = sin(angles.x);
-		float cy = cos(angles.y);
-		float sy = sin(angles.y);
+		/*glm::vec2 ang(angles.x, angles.y);
 
-		return glm::vec3(cx * cy, sx * cy, sy) * std::exp(-zoom);
+		float cx = cos(ang.x);
+		float sx = sin(ang.x);
+		float cy = cos(ang.y);
+		float sy = sin(ang.y);
+
+		return glm::vec3(cx * cy, sx * cy, sy) * std::exp(-zoom);*/
+		float pitch = angles.x;
+		float yaw = angles.y;
+
+		float cp = cos(pitch);
+		float sp = sin(pitch);
+		float cy = cos(yaw);
+		float sy = sin(yaw);
+
+		// Rotationslogik: pitch um x, yaw um negative y-Achse
+		glm::vec3 dir = glm::vec3(
+			cp * sy,   // x
+			-sp,       // y (negative y = nach oben)
+			cp * cy    // z
+		);
+
+		return dir * std::exp(-zoom);
 	}
 };
 

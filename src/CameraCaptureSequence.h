@@ -39,6 +39,7 @@ public:
 	std::vector<CameraCapture*>& captures();
 	CameraCapture* capture_at_idx(int idx);
 	void add_capture(CameraCapture* capture);
+	void remove_capture(CameraCapture* capture);
 	bool save_sequence(const std::filesystem::path path);
 	bool load_sequence(const std::vector<std::filesystem::path> paths);
 
