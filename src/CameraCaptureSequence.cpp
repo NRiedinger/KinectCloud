@@ -106,59 +106,16 @@ void CameraCaptureSequence::save_cameras_extrinsics(std::filesystem::path path)
 			continue;
 		}
 
-		/*if (!capture->is_selected) {
-			continue;
-		}*/
-
 		std::string file_name = std::format("{}.png", capture->name);
 		int camera_id = 1;
 
-		// glm::mat4 trans_mat_inv = glm::inverse(capture->transform);
-		/*glm::mat4 trans_mat_inv = capture->transform;
-		glm::mat3 rot = glm::mat3(trans_mat_inv);
-		glm::quat q = glm::quat_cast(rot);
-		glm::vec3 t = glm::vec3(trans_mat_inv[3])*//* - capture->data_pointer->centroid()*/;
-
-		/*glm::mat3 rot = glm::mat3(capture->transform);
-		glm::quat q = glm::quat_cast(rot);
-		glm::vec3 t = glm::vec3(capture->transform[3]) - capture->data_pointer->centroid();*/
-
-		/*float tx = t.x * 1000.f;
-		float ty = t.y * 1000.f;
-		float tz = t.z * 1000.f;*/
-
-		/*float tx = -t.x * 1000.f;
-		float ty = -t.z * 1000.f;
-		float tz = t.y * 1000.f;*/
-
-		//glm::vec3 centroid(0.f);
-		//if (capture->data_pointer != nullptr) {
-		//	centroid = capture->data_pointer->centroid();
-		//	//t -= centroid;
-		//	t.x -= centroid.x;
-		//	t.y -= centroid.y;
-		//	t.z -= -centroid.z;
-		//}
-
-		//// float tx = -t.x;
-		//float tx = -t.x;
-		//float ty = t.y;
-		//float tz = t.z;
-
-		//glm::vec3 cam_origin_local = glm::vec3(0.f);
-		//glm::vec3 cam_origin_world = glm::vec3(capture->transform * glm::vec4(cam_origin_local, 1.f));
-
-		//double tx = cam_origin_world.x;
-		//double ty = -cam_origin_world.y;
-		//double tz = -cam_origin_world.z;
-
-		////glm::quat q = glm::quat();
-		//glm::quat q = glm::quat_cast(capture->transform);
-
 		glm::mat4 world_to_cam = glm::inverse(capture->transform);
+		glm::vec3 centroid = capture->data_pointer->centroid();
 
 		glm::mat3 R = glm::mat3(world_to_cam);
 		glm::vec3 t = glm::vec3(world_to_cam[3]);
+
+		t += centroid;
 
 		glm::quat q = glm::quat_cast(R);
 		q = glm::normalize(q);

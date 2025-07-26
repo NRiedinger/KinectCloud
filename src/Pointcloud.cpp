@@ -295,11 +295,11 @@ void Pointcloud::generate_point_cloud(const k4a::image xy_table, k4a::image poin
 		m_points.push_back(point);
 	}
 
-	/*m_centroid = sum / static_cast<float>(m_points.size());
+	m_centroid = sum / static_cast<float>(m_points.size());
 
 	for (auto& pt : m_points) {
 		pt.position -= m_centroid;
-	}*/
+	}
 }
 
 void Pointcloud::write_point_cloud_to_buffer()
