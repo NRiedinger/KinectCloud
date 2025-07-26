@@ -598,10 +598,12 @@ void PointcloudRenderer::write_points3D(std::filesystem::path path)
 				continue;
 			}
 
+			glm::vec4 transformed = *pc->get_transform_ptr() * glm::vec4(p.position.x, p.position.y, p.position.z, 1.f);
+
 			// id
 			ofs << id++ << " ";
 			// pos
-			ofs << -p.position.x << " " << p.position.y << " " << p.position.z << " ";
+			ofs << -transformed.x << " " << transformed.y << " " << transformed.z << " ";
 			//ofs << p.position.x << " " << p.position.y << " " << p.position.z << " ";
 			//ofs << p.position.x / 1000.f << " " << p.position.y / 1000.f << " " << p.position.z / 1000.f << " ";
 			// color

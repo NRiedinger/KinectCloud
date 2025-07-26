@@ -558,9 +558,10 @@ void Application::render_capture_menu()
 
 				auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
 				pc->load_from_capture(capture->depth_image, capture->color_image, capture->calibration);
-				pc->m_loaded = true;
+				pc->m_loaded = capture->is_selected;
 				capture->data_pointer = m_renderer.add_pointcloud(pc);
 			}
+			m_app_state = AppState::Pointcloud;
 		}
 		else {
 			Logger::log("Failed to load captures", LoggingSeverity::Error);
@@ -594,8 +595,8 @@ void Application::render_capture_menu()
 		if (!capture->is_colmap && ImGui::Checkbox("##Select", &capture->is_selected)) {
 			if (capture->is_selected) {
 				auto pc = capture->data_pointer;
-				if (pc != nullptr) {
-					pc->m_loaded = true;
+				if (capture->data_pointer) {
+					capture->data_pointer->m_loaded = true;
 				}
 			}
 			else {
@@ -726,60 +727,12 @@ void Application::render_capture_menu()
 		
 	}
 	else if (m_app_state == AppState::Pointcloud) {
-		//if (ImGui::Button("Load Test-PLY")) {
 
-		//	{
-		//		CameraCapture* capture = new CameraCapture();
-		//		capture->id = m_capture_sequence.get_next_id();
-		//		capture->name = "Test 1";
-		//		capture->is_selected = true;
-		//		//capture->transform = glm::mat4(1.f) * glm::toMat4(glm::quat(glm::radians(glm::vec3(0.f, 0.f, 0.f))));
-		//		capture->transform = glm::mat4(1.f);
-		//		capture->camera_orientation = glm::quat();
-		//		m_capture_sequence.add_capture(capture);
-		//		CameraCaptureSequence::s_capturelist_updated = true;
-
-		//		auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
-		//		pc->set_color({ 0.f, 1.f, 0.f });
-		//		pc->load_from_ply(RESOURCE_DIR "/depth_point_cloud.ply", glm::mat4(1.f));
-		//		m_renderer.add_pointcloud(pc);
-		//	}
-
-		//	{
-		//		CameraCapture* capture = new CameraCapture();
-		//		capture->id = m_capture_sequence.get_next_id();
-		//		capture->name = "Test 2";
-		//		capture->is_selected = true;
-		//		//capture->transform = glm::translate(glm::mat4(1.f) * glm::toMat4(glm::quat(glm::radians(glm::vec3(0.f, 0.f, 0.f)))), glm::vec3(1.f, 0.f, 0.f));
-		//		capture->transform = glm::mat4(1.f);
-		//		capture->camera_orientation = glm::quat();
-		//		m_capture_sequence.add_capture(capture);
-		//		CameraCaptureSequence::s_capturelist_updated = true;
-
-		//		glm::mat4 initial_transform = glm::translate(glm::mat4(1.f) * glm::toMat4(glm::quat(glm::radians(glm::vec3(0.f, 0.f, 0.f)))), glm::vec3(100.f, 0.f, 0.f));
-		//		
-		//		auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
-		//		pc->set_color({ 1.f, 0.f, 0.f });
-		//		pc->load_from_ply(RESOURCE_DIR "/depth_point_cloud.ply", initial_transform);
-		//		m_renderer.add_pointcloud(pc);
-		//	}
-		//}
-
-		//ImGui::Separator();
-		/*ImGui::Text("ICP settings");
-		static int icp_max_iter = 50;
-		static float icp_max_corr_dist = 1.f;
-		ImGui::SliderInt("Max. Iterations", &icp_max_iter, 1, 50);
-		ImGui::SliderFloat("Max. Correspondence Distance", &icp_max_corr_dist, 0.01, 5.0);
-
-		if (ImGui::Button("Align")) {
-			m_renderer.align_pointclouds(icp_max_iter, icp_max_corr_dist);
-		}*/
 
 		if (!m_camera.is_initialized())
 			ImGui::BeginDisabled();
 
-		if (ImGui::Button("Export")) {
+		if (ImGui::Button("Export", ImVec2(ImGui::GetContentRegionAvail().x, 40))) {
 			export_for_3dgs();
 		}
 
@@ -1000,6 +953,16 @@ void Application::render_edit_menu()
 	ImGui::DragFloat3("Position", &translation.x, 1.f, -50.f, 50.f);
 	ImGui::DragFloat3("Rotation", &rotation_deg.x, 1.f, -180.f, 180.f);
 	ImGui::DragFloat("Scale", &scale.x, 1.f, .1f, 100.f);
+
+	
+
+	if (rotation_deg.x > 180.f) rotation_deg.x -= 360.f;
+	else if (rotation_deg.x < -180.f) rotation_deg.x += 360.f;
+	if (rotation_deg.y > 180.f) rotation_deg.y -= 360.f;
+	else if (rotation_deg.y < -180.f) rotation_deg.y += 360.f;
+	if (rotation_deg.z > 180.f) rotation_deg.z -= 360.f;
+	else if (rotation_deg.z < -180.f) rotation_deg.z += 360.f;
+
 
 	glm::mat4 new_transform = glm::translate(glm::mat4(1.f), translation) *
 		glm::toMat4(Helper::euler_degrees_to_quat(rotation_deg)) *

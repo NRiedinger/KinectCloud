@@ -1,4 +1,4 @@
-#include "CameraCaptureSequence.h"
+﻿#include "CameraCaptureSequence.h"
 #include "Helpers.h"
 
 #include <algorithm>
@@ -33,18 +33,6 @@ bool CameraCaptureSequence::is_initialized()
 {
     return m_initialized;
 }
-
-//char** CameraCaptureSequence::get_capturenames()
-//{
-//	std::vector<char*> result;
-//	result.resize(m_captures.size());
-//
-//	std::transform(m_captures.begin(), m_captures.end(), result.begin(), [](CameraCapture* capture) {
-//		return capture->name;
-//	});
-//
-//	return &result[0];
-//}
 
 std::vector<std::string> CameraCaptureSequence::get_capturenames()
 {
@@ -123,11 +111,13 @@ void CameraCaptureSequence::save_cameras_extrinsics(std::filesystem::path path)
 		}*/
 
 		std::string file_name = std::format("{}.png", capture->name);
+		int camera_id = 1;
 
-		glm::mat4 trans_mat_inv = glm::inverse(capture->transform);
+		// glm::mat4 trans_mat_inv = glm::inverse(capture->transform);
+		/*glm::mat4 trans_mat_inv = capture->transform;
 		glm::mat3 rot = glm::mat3(trans_mat_inv);
 		glm::quat q = glm::quat_cast(rot);
-		glm::vec3 t = glm::vec3(trans_mat_inv[3])/* - capture->data_pointer->centroid()*/;
+		glm::vec3 t = glm::vec3(trans_mat_inv[3])*//* - capture->data_pointer->centroid()*/;
 
 		/*glm::mat3 rot = glm::mat3(capture->transform);
 		glm::quat q = glm::quat_cast(rot);
@@ -141,15 +131,51 @@ void CameraCaptureSequence::save_cameras_extrinsics(std::filesystem::path path)
 		float ty = -t.z * 1000.f;
 		float tz = t.y * 1000.f;*/
 
-		float tx = -t.x;
-		float ty = t.y;
-		float tz = t.z;
+		//glm::vec3 centroid(0.f);
+		//if (capture->data_pointer != nullptr) {
+		//	centroid = capture->data_pointer->centroid();
+		//	//t -= centroid;
+		//	t.x -= centroid.x;
+		//	t.y -= centroid.y;
+		//	t.z -= -centroid.z;
+		//}
+
+		//// float tx = -t.x;
+		//float tx = -t.x;
+		//float ty = t.y;
+		//float tz = t.z;
+
+		//glm::vec3 cam_origin_local = glm::vec3(0.f);
+		//glm::vec3 cam_origin_world = glm::vec3(capture->transform * glm::vec4(cam_origin_local, 1.f));
+
+		//double tx = cam_origin_world.x;
+		//double ty = -cam_origin_world.y;
+		//double tz = -cam_origin_world.z;
+
+		////glm::quat q = glm::quat();
+		//glm::quat q = glm::quat_cast(capture->transform);
+
+		glm::mat4 world_to_cam = glm::inverse(capture->transform);
+
+		glm::mat3 R = glm::mat3(world_to_cam);
+		glm::vec3 t = glm::vec3(world_to_cam[3]);
+
+		glm::quat q = glm::quat_cast(R);
+		q = glm::normalize(q);
+
+		double tx = -t.x;
+		double ty = t.y;
+		double tz = t.z;
+
+		double qw = q.w;
+		double qx = q.x;
+		double qy = -q.y;
+		double qz = -q.z;
 
 		ofs << std::format("{} {} {} {} {} {} {} {} {} {} \n",
-						   capture->id, q.w, q.x, q.y, q.z, tx, ty, tz, 1, file_name);
+						   capture->id, qw, qx, qy, qz, tx, ty, tz, camera_id, file_name);
 
 		ofs << "0.0 0.0 -1 \n";
-		//ofs << "\n";
 	}
 
 	ofs.close();
