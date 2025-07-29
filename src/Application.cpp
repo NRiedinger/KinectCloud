@@ -97,7 +97,8 @@ void Application::capture()
 {
 	CameraCapture* capture = new CameraCapture();
 
-	std::string capture_name = std::format("{}", m_capture_sequence.captures().size());
+	//std::string capture_name = std::format("{}", m_capture_sequence.captures().size());
+	std::string capture_name = Helper::get_current_datetime_string();
 
 	capture->id = m_capture_sequence.get_next_id();
 	capture->name = capture_name;
@@ -166,7 +167,7 @@ void Application::run_colmap()
 
 void Application::export_for_3dgs()
 {
-	std::string timestamp = Helper::get_current_time_string();
+	std::string timestamp = Helper::get_current_datetime_string();
 	std::string current_export_dir = EXPORT_DIR + std::format("/{}", timestamp);
 
 	// create folderstructure

@@ -61,7 +61,7 @@ void CameraCaptureSequence::save_images(std::filesystem::path images_dir_path, b
 		//}
 	}
 
-	std::string datetimestring = Helper::get_current_time_string();
+	std::string datetimestring = Helper::get_current_datetime_string();
 	
 	int i = 0;
 	for (auto& capture : m_captures) {
