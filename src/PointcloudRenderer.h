@@ -7,7 +7,8 @@
 
 #include <imgui.h>
 
-
+#include <pcl/point_types.h>
+#include <pcl/point_cloud.h>
 
 
 #pragma once
@@ -30,6 +31,7 @@ public:
 	int get_num_vertices();
 	float get_futhest_point();
 	
+	std::shared_ptr<pcl::PointCloud<pcl::PointXYZRGB>> vector_to_pointcloud(const std::vector<PointAttributes>& vec, const glm::mat4 trans_mat);
 	void align_pointclouds(int max_iter, float max_corr_dist, Pointcloud* source, Pointcloud* target);
 	void reload_renderpipeline();
 

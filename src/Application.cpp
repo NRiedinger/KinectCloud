@@ -585,7 +585,10 @@ void Application::render_capture_menu()
 
 	ImGui::Separator();
 
-	ImGui::BeginChild("Captures Scrollable", { 0, GUI_CAPTURELIST_HEIGHT }, NULL, ImGuiWindowFlags_AlwaysVerticalScrollbar);
+	float available_height = ImGui::GetContentRegionAvail().y;
+	float buttons_height = 75.f;
+
+	ImGui::BeginChild("Captures Scrollable", { 0, available_height - buttons_height }, NULL, ImGuiWindowFlags_AlwaysVerticalScrollbar);
 	ImGui::Indent(GUI_CAPTURELIST_INDENT);
 
 	int i = 0;
@@ -594,6 +597,11 @@ void Application::render_capture_menu()
 		ImGui::PushID(i);
 
 		if (!capture->is_colmap && ImGui::Checkbox("##Select", &capture->is_selected)) {
+
+			m_render_menu_open = false;
+			m_selected_edit_idx = -1;
+			m_renderer.set_selected(nullptr);
+
 			if (capture->is_selected) {
 				auto pc = capture->data_pointer;
 				if (capture->data_pointer) {
@@ -634,8 +642,17 @@ void Application::render_capture_menu()
 		}
 
 		ImGui::SameLine();
-		if (ImGui::Button("Show image")) {
-			ImGui::OpenPopup("Image preview");
+
+		{
+			if (capture->is_colmap)
+				ImGui::BeginDisabled();
+
+			if (ImGui::Button("Show image")) {
+				ImGui::OpenPopup("Image preview");
+			}
+
+			if (capture->is_colmap)
+				ImGui::EndDisabled();
 		}
 
 		if (ImGui::BeginPopup("Image preview")) {
@@ -693,38 +710,7 @@ void Application::render_capture_menu()
 			m_camera.calibrate_sensors();
 		}
 
-		{
-			if (m_capture_sequence.captures().size() < 1)
-				ImGui::BeginDisabled();
-
-			if (ImGui::Button("Run COLMAP")) {
-				// save all captured images to /tmp/colmap/images
-				m_capture_sequence.save_images(TMP_DIR "/colmap/images");
-
-				// run colmap on saved images
-				run_colmap();
-				
-				CameraCapture* capture = new CameraCapture();
-				capture->id = m_capture_sequence.get_next_id();
-				capture->name = "COLMAP Pointcloud";
-				capture->is_selected = true;
-				capture->is_colmap = true;
-				capture->transform = glm::mat4(1.f);
-				capture->camera_orientation = glm::quat();
-				m_capture_sequence.add_capture(capture);
-				CameraCaptureSequence::s_capturelist_updated = true;
-
-				auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
-				pc->set_is_colmap(true);
-				pc->load_from_points3D(TMP_DIR "/colmap/sparse/0/points3D.bin");
-				m_renderer.add_pointcloud(pc);
-
-				m_app_state = AppState::Pointcloud;
-			}
-
-			if (m_capture_sequence.captures().size() < 1)
-				ImGui::EndDisabled();
-		}
+		
 		
 	}
 	else if (m_app_state == AppState::Pointcloud) {
@@ -738,6 +724,39 @@ void Application::render_capture_menu()
 		}
 
 		if (!m_camera.is_initialized())
+			ImGui::EndDisabled();
+	}
+
+	{
+		if (m_capture_sequence.captures().size() < 1)
+			ImGui::BeginDisabled();
+
+		if (ImGui::Button("Run COLMAP")) {
+			// save all captured images to /tmp/colmap/images
+			m_capture_sequence.save_images(TMP_DIR "/colmap/images");
+
+			// run colmap on saved images
+			run_colmap();
+
+			CameraCapture* capture = new CameraCapture();
+			capture->id = m_capture_sequence.get_next_id();
+			capture->name = "COLMAP Pointcloud";
+			capture->is_selected = true;
+			capture->is_colmap = true;
+			capture->transform = glm::mat4(1.f);
+			capture->camera_orientation = glm::quat();
+			m_capture_sequence.add_capture(capture);
+			CameraCaptureSequence::s_capturelist_updated = true;
+
+			auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
+			pc->set_is_colmap(true);
+			pc->load_from_points3D(TMP_DIR "/colmap/sparse/0/points3D.bin");
+			m_renderer.add_pointcloud(pc);
+
+			m_app_state = AppState::Pointcloud;
+		}
+
+		if (m_capture_sequence.captures().size() < 1)
 			ImGui::EndDisabled();
 	}
 }
@@ -979,7 +998,7 @@ void Application::render_edit_menu()
 	ImGui::Text("ICP settings");
 	static int icp_max_iter = 50;
 	static float icp_max_corr_dist = 1.f;
-	ImGui::SliderInt("Max. Iterations", &icp_max_iter, 1, 50);
+	ImGui::SliderInt("Max. Iterations", &icp_max_iter, 1, 500);
 	ImGui::SliderFloat("Max. Correspondence Distance", &icp_max_corr_dist, 0.01, 5.0);
 
 	std::vector<std::string> items = m_capture_sequence.get_capturenames();
@@ -1015,6 +1034,7 @@ void Application::render_edit_menu()
 			auto target_capture = m_capture_sequence.capture_at_idx(m_align_target_idx);
 			Logger::log(std::format("source: {} -> target: {}", capture->name, target_capture->name));
 			m_renderer.align_pointclouds(icp_max_iter, icp_max_corr_dist, capture->data_pointer, target_capture->data_pointer);
+			m_align_target_idx = -1;
 		}
 
 		if (button_align_disabled)

@@ -65,6 +65,9 @@ void CameraCaptureSequence::save_images(std::filesystem::path images_dir_path, b
 	
 	int i = 0;
 	for (auto& capture : m_captures) {
+		if (capture->is_colmap)
+			continue;
+
 		std::string path = std::format("{}/{}.png", images_dir_path.string(), capture->name);
 		if (with_timestamp) {
 			path = std::format("{}/{}_{}.png", images_dir_path.string(), datetimestring, capture->name);

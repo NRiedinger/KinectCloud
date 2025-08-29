@@ -125,42 +125,42 @@ void PointcloudRenderer::set_selected(Pointcloud* pc)
 	m_selected_pointcloud = pc;
 }
 
+std::shared_ptr<pcl::PointCloud<pcl::PointXYZRGB>> PointcloudRenderer::vector_to_pointcloud(const std::vector<PointAttributes>& vec, const glm::mat4 trans_mat) {
+	auto cloud = std::make_shared<pcl::PointCloud<pcl::PointXYZRGB>>();
+	cloud->width = static_cast<uint32_t>(vec.size());
+	cloud->height = 1;
+	cloud->is_dense = false;
+	cloud->points.resize(vec.size());
+
+	for (size_t i = 0; i < vec.size(); i++) {
+		const auto& pt = vec[i];
+
+		glm::vec4 transformed_point = trans_mat * glm::vec4(
+			pt.position.x,
+			pt.position.y,
+			pt.position.z,
+			1.f);
+
+		pcl::PointXYZRGB p;
+
+		p.x = transformed_point.x;
+		p.y = transformed_point.y;
+		p.z = transformed_point.z;
+
+		p.r = static_cast<uint8_t>(pt.color.r * 255.f);
+		p.g = static_cast<uint8_t>(pt.color.g * 255.f);
+		p.b = static_cast<uint8_t>(pt.color.b * 255.f);
+
+		cloud->points[i] = p;
+	}
+
+	return cloud;
+}
+
 void PointcloudRenderer::align_pointclouds(int max_iter, float max_corr_dist, Pointcloud* source, Pointcloud* target)
 {
 	if (!source || !target)
 		return;
-	
-	static auto vector_to_pointcloud = [](const std::vector<PointAttributes>& vec, const glm::mat4 trans_mat) {
-		auto cloud = std::make_shared<pcl::PointCloud<pcl::PointXYZRGB>>();
-		cloud->width = static_cast<uint32_t>(vec.size());
-		cloud->height = 1;
-		cloud->is_dense = false;
-		cloud->points.resize(vec.size());
-
-		for (size_t i = 0; i < vec.size(); i++) {
-			const auto& pt = vec[i];
-
-			glm::vec4 transformed_point = trans_mat * glm::vec4(
-				pt.position.x,
-				pt.position.y,
-				pt.position.z,
-				1.f);
-
-			pcl::PointXYZRGB p;
-
-			p.x = transformed_point.x;
-			p.y = transformed_point.y;
-			p.z = transformed_point.z;
-
-			p.r = static_cast<uint8_t>(pt.color.r * 255.f);
-			p.g = static_cast<uint8_t>(pt.color.g * 255.f);
-			p.b = static_cast<uint8_t>(pt.color.b * 255.f);
-
-			cloud->points[i] = p;
-		}
-
-		return cloud;
-	};
 
 	static auto eigen_to_glm = [](const Eigen::Matrix4f& eigen_mat) {
 		glm::mat4 glm_mat;
@@ -200,10 +200,13 @@ void PointcloudRenderer::align_pointclouds(int max_iter, float max_corr_dist, Po
 		Logger::log(std::format("ICP converged. Fitness Score: {}", icp.getFitnessScore()));
 
 		// Transformation ausgeben
-		auto transform = eigen_to_glm(icp.getFinalTransformation());
-		Logger::log(std::format("Transformationmatrix:\n{}", Helper::mat4_to_string(transform)));
+		glm::mat4 transform_delta = eigen_to_glm(icp.getFinalTransformation());
+		glm::mat4 transform_old = *source->get_transform_ptr();
+		glm::mat4 transform_new = transform_delta * transform_old;
 
-		source->set_transform(transform);
+		Logger::log(std::format("Transformationmatrix:\n{}", Helper::mat4_to_string(transform_delta)));
+
+		source->set_transform(transform_new);
 	}
 	else {
 		Logger::log("ICP failed to converge.", LoggingSeverity::Warning);
