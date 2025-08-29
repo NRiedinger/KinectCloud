@@ -1,4 +1,4 @@
-#include "CameraCaptureSequence.h"
+﻿#include "CameraCaptureSequence.h"
 #include "Helpers.h"
 
 #include <algorithm>
@@ -34,8 +34,20 @@ bool CameraCaptureSequence::is_initialized()
     return m_initialized;
 }
 
+std::vector<std::string> CameraCaptureSequence::get_capturenames()
+{
+	std::vector<std::string> result;
+	result.resize(m_captures.size());
 
-void CameraCaptureSequence::save_images(std::filesystem::path images_dir_path, bool only_selected)
+	std::transform(m_captures.begin(), m_captures.end(), result.begin(), [](CameraCapture* capture) {
+		return capture->name;
+	});
+
+	return result;
+}
+
+
+void CameraCaptureSequence::save_images(std::filesystem::path images_dir_path, bool with_timestamp)
 {
 	if (!std::filesystem::exists(images_dir_path)) {
 		// if directory does not exist, create it
@@ -44,17 +56,21 @@ void CameraCaptureSequence::save_images(std::filesystem::path images_dir_path, b
 	}
 	else {
 		// if directory exists, delete all previous images
-		for (const auto& file : std::filesystem::directory_iterator(images_dir_path)) {
-			std::filesystem::remove_all(file.path());
-		}
+		//for (const auto& file : std::filesystem::directory_iterator(images_dir_path)) {
+		//	std::filesystem::remove_all(file.path());
+		//}
 	}
+
+	std::string datetimestring = Helper::get_current_datetime_string();
 	
 	int i = 0;
 	for (auto& capture : m_captures) {
-		std::string path = std::format("{}/{}.png", images_dir_path.string(), capture->name);
-
-		if (!capture->is_selected && only_selected) {
+		if (capture->is_colmap)
 			continue;
+
+		std::string path = std::format("{}/{}.png", images_dir_path.string(), capture->name);
+		if (with_timestamp) {
+			path = std::format("{}/{}_{}.png", images_dir_path.string(), datetimestring, capture->name);
 		}
 
 		auto color_image_converted = Helper::convert_bgra_to_rgba(capture->color_image);
@@ -93,23 +109,31 @@ void CameraCaptureSequence::save_cameras_extrinsics(std::filesystem::path path)
 			continue;
 		}
 
-		if (!capture->is_selected) {
-			continue;
-		}
-
 		std::string file_name = std::format("{}.png", capture->name);
+		int camera_id = 1;
 
-		/*glm::mat4 trans_mat_inv = glm::inverse(capture->transform);
-		glm::mat3 rot = glm::mat3(trans_mat_inv);
-		glm::quat q = glm::quat_cast(rot);
-		glm::vec3 t = glm::vec3(trans_mat_inv[3]);*/
+		glm::mat4 world_to_cam = glm::inverse(capture->transform);
+		glm::vec3 centroid = capture->data_pointer->centroid();
 
-		glm::mat3 rot = glm::mat3(capture->transform);
-		glm::quat q = glm::quat_cast(rot);
-		glm::vec3 t = glm::vec3(capture->transform[3]) - capture->data_pointer->centroid();
+		glm::mat3 R = glm::mat3(world_to_cam);
+		glm::vec3 t = glm::vec3(world_to_cam[3]);
+
+		t += centroid;
+
+		glm::quat q = glm::quat_cast(R);
+		q = glm::normalize(q);
+
+		double tx = -t.x;
+		double ty = t.y;
+		double tz = t.z;
+
+		double qw = q.w;
+		double qx = q.x;
+		double qy = -q.y;
+		double qz = -q.z;
 
 		ofs << std::format("{} {} {} {} {} {} {} {} {} {} \n",
-						   capture->id, q.w, q.x, q.y, q.z, t.x, t.y, t.z, 1, file_name);
+						   capture->id, qw, qx, qy, qz, tx, ty, tz, camera_id, file_name);
 
 		ofs << "0.0 0.0 -1 \n";
 	}
@@ -123,9 +147,22 @@ std::vector<CameraCapture*>& CameraCaptureSequence::captures()
 	return m_captures;
 }
 
+CameraCapture* CameraCaptureSequence::capture_at_idx(int idx)
+{
+	return m_captures.at(idx);
+}
+
 void CameraCaptureSequence::add_capture(CameraCapture* capture)
 {
 	m_captures.push_back(capture);
+}
+
+void CameraCaptureSequence::remove_capture(CameraCapture* capture)
+{
+	m_captures.erase(
+		std::remove(m_captures.begin(), m_captures.end(), capture),
+		m_captures.end()
+	);
 }
 
 bool CameraCaptureSequence::save_sequence(const std::filesystem::path path)
@@ -144,6 +181,7 @@ bool CameraCaptureSequence::save_sequence(const std::filesystem::path path)
 
 
 		Helper::write_string(ofs, capture->name);
+		Helper::write_binary(ofs, capture->is_selected);
 
 		// depth image
 		int depth_width = capture->depth_image.get_width_pixels();
@@ -188,7 +226,7 @@ bool CameraCaptureSequence::load_sequence(const std::vector<std::filesystem::pat
 
 		capture->id = get_next_id();
 		Helper::read_string(ifs, capture->name);
-		capture->is_selected = false;
+		Helper::read_binary(ifs, capture->is_selected);
 		capture->is_colmap = false;
 		capture->is_expanded = false;
 

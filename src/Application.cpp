@@ -97,7 +97,8 @@ void Application::capture()
 {
 	CameraCapture* capture = new CameraCapture();
 
-	std::string capture_name = std::format("{}", m_capture_sequence.captures().size());
+	//std::string capture_name = std::format("{}", m_capture_sequence.captures().size());
+	std::string capture_name = Helper::get_current_datetime_string();
 
 	capture->id = m_capture_sequence.get_next_id();
 	capture->name = capture_name;
@@ -110,6 +111,10 @@ void Application::capture()
 
 	capture->preview_image = Texture(m_device, m_queue, nullptr, 0, capture->color_image.get_width_pixels(), capture->color_image.get_height_pixels(), wgpu::TextureFormat::BGRA8Unorm);
 	capture->preview_image.update(reinterpret_cast<const BgraPixel*>(capture->color_image.get_buffer()));
+
+	auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
+	pc->load_from_capture(capture->depth_image, capture->color_image, capture->calibration);
+	capture->data_pointer = m_renderer.add_pointcloud(pc);
 	
 	m_capture_sequence.add_capture(capture);
 	CameraCaptureSequence::s_capturelist_updated = true;
@@ -162,7 +167,7 @@ void Application::run_colmap()
 
 void Application::export_for_3dgs()
 {
-	std::string timestamp = Helper::get_current_time_string();
+	std::string timestamp = Helper::get_current_datetime_string();
 	std::string current_export_dir = EXPORT_DIR + std::format("/{}", timestamp);
 
 	// create folderstructure
@@ -171,7 +176,7 @@ void Application::export_for_3dgs()
 	std::filesystem::create_directories(current_export_dir + "/sparse/0");
 
 	// save images
-	m_capture_sequence.save_images(current_export_dir + "/images", true);
+	m_capture_sequence.save_images(current_export_dir + "/images");
 
 	// points3D.txt
 	m_renderer.write_points3D(current_export_dir + "/sparse/0");
@@ -181,6 +186,12 @@ void Application::export_for_3dgs()
 
 	// images.txt
 	m_capture_sequence.save_cameras_extrinsics(current_export_dir + "/sparse/0");
+
+	std::string colmap_bin_path = TOOLS_DIR "/colmap-x64-windows-nocuda/COLMAP.bat";
+	std::string sparse_path = current_export_dir + "/sparse/0";
+	
+	std::string cmd_model_converter = std::format("\"\"{}\" model_converter --input_path \"{}\" --output_path \"{}\" --output_type BIN\"", colmap_bin_path, sparse_path, sparse_path);
+	std::system(cmd_model_converter.c_str());
 }
 
 bool Application::init_window_and_device()
@@ -319,7 +330,6 @@ bool Application::init_swapchain()
 	swapchain_desc.height = static_cast<uint32_t>(m_window_height);
 	swapchain_desc.usage = wgpu::TextureUsage::RenderAttachment;
 	swapchain_desc.format = m_swapchain_format;
-	//swapchain_desc.presentMode = wgpu::PresentMode::Fifo;
 	swapchain_desc.presentMode = wgpu::PresentMode::Mailbox;
 	m_swapchain = m_device.createSwapChain(m_surface, swapchain_desc);
 	if (!m_swapchain) {
@@ -383,11 +393,15 @@ bool Application::init_gui()
 		std::filesystem::create_directories(CAPTURE_DIR);
 	}
 
-	m_save_dialog = ImGui::FileBrowser(ImGuiFileBrowserFlags_SelectDirectory | ImGuiFileBrowserFlags_CreateNewDir | ImGuiFileBrowserFlags_HideRegularFiles);
-	m_save_dialog.SetTitle("Select directory to save (must be empty)");
+	m_save_dialog = ImGui::FileBrowser(ImGuiFileBrowserFlags_SelectDirectory | ImGuiFileBrowserFlags_CreateNewDir | ImGuiFileBrowserFlags_HideRegularFiles | ImGuiFileBrowserFlags_ConfirmOnEnter);
+	m_save_dialog.SetTitle("Select empty directory to save captures");
 	m_save_dialog.SetDirectory(CAPTURE_DIR);
 
-	m_load_dialog = ImGui::FileBrowser(ImGuiFileBrowserFlags_MultipleSelection);
+	m_saveimages_dialog = ImGui::FileBrowser(ImGuiFileBrowserFlags_SelectDirectory | ImGuiFileBrowserFlags_CreateNewDir | ImGuiFileBrowserFlags_HideRegularFiles | ImGuiFileBrowserFlags_ConfirmOnEnter);
+	m_saveimages_dialog.SetTitle("Select empty directory to save images");
+	m_saveimages_dialog.SetDirectory(CAPTURE_DIR);
+
+	m_load_dialog = ImGui::FileBrowser(ImGuiFileBrowserFlags_MultipleSelection | ImGuiFileBrowserFlags_ConfirmOnEnter);
 	m_load_dialog.SetTitle("Select captures to load");
 	m_load_dialog.SetDirectory(CAPTURE_DIR);
 	m_load_dialog.SetTypeFilters({ ".capture" });
@@ -457,6 +471,7 @@ void Application::after_frame()
 
 	m_encoder.release();
 	m_queue.submit(command);
+	command.release();
 
 	m_next_texture.release();
 	m_swapchain.present();
@@ -470,6 +485,7 @@ void Application::render()
 	render_content();
 	render_console();
 	render_debug();
+	render_edit_menu();
 }
 
 
@@ -484,6 +500,7 @@ void Application::render_capture_menu()
 		if (ImGui::Button("Save")) {
 			m_save_dialog.Open();
 		}
+		
 		m_save_dialog.Display();
 
 		if (m_save_dialog.HasSelected()) {
@@ -506,6 +523,26 @@ void Application::render_capture_menu()
 
 	ImGui::SameLine();
 
+	if (ImGui::Button("Save Images")) {
+		m_saveimages_dialog.Open();
+	}
+
+	m_saveimages_dialog.Display();
+
+	if (m_saveimages_dialog.HasSelected()) {
+		auto selected_path = m_save_dialog.GetSelected();
+		if (std::filesystem::exists(selected_path)) {
+			m_capture_sequence.save_images(selected_path, true);
+		}
+		else {
+			Logger::log(std::format("Failed to save images to {}.", selected_path.string()), LoggingSeverity::Error);
+		}
+
+		m_saveimages_dialog.ClearSelected();
+	}
+
+	ImGui::SameLine();
+
 	if (ImGui::Button("Load")) {
 		m_load_dialog.Open();
 	}
@@ -519,7 +556,13 @@ void Application::render_capture_menu()
 			for (auto& capture : m_capture_sequence.captures()) {
 				capture->preview_image = Texture(m_device, m_queue, nullptr, 0, capture->color_image.get_width_pixels(), capture->color_image.get_height_pixels(), wgpu::TextureFormat::BGRA8Unorm);
 				capture->preview_image.update(reinterpret_cast<const BgraPixel*>(capture->color_image.get_buffer()));
+
+				auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
+				pc->load_from_capture(capture->depth_image, capture->color_image, capture->calibration);
+				pc->m_loaded = capture->is_selected;
+				capture->data_pointer = m_renderer.add_pointcloud(pc);
 			}
+			m_app_state = AppState::Pointcloud;
 		}
 		else {
 			Logger::log("Failed to load captures", LoggingSeverity::Error);
@@ -528,85 +571,112 @@ void Application::render_capture_menu()
 		m_load_dialog.ClearSelected();
 	}
 
+	ImGui::SameLine();
+
+	ImGui::SetCursorPosX(GUI_MENU_WIDTH - 65.f);
+	if (ImGui::Button("Clear")) {
+		for (auto capture : m_capture_sequence.captures()) {
+			delete capture;
+		}
+		m_capture_sequence.captures().clear();
+
+		m_renderer.clear_pointclouds();
+	}
+
 	ImGui::Separator();
 
-	ImGui::BeginChild("Captures Scrollable", { 0, GUI_CAPTURELIST_HEIGHT }, NULL, ImGuiWindowFlags_AlwaysVerticalScrollbar);
+	float available_height = ImGui::GetContentRegionAvail().y;
+	float buttons_height = 75.f;
+
+	ImGui::BeginChild("Captures Scrollable", { 0, available_height - buttons_height }, NULL, ImGuiWindowFlags_AlwaysVerticalScrollbar);
 	ImGui::Indent(GUI_CAPTURELIST_INDENT);
 
 	int i = 0;
 	Pointcloud* to_remove = nullptr;
-	for (auto& capture : m_capture_sequence.captures()) {
+	for (auto capture : m_capture_sequence.captures()) {
 		ImGui::PushID(i);
 
-		if (ImGui::TreeNodeEx(std::format("Capture \"{}\"", capture->name).c_str(), ImGuiTreeNodeFlags_SpanAvailWidth)) {
-			ImGui::Separator();
-			if (!capture->is_colmap && ImGui::Checkbox("Select", &capture->is_selected)) {
-				if (capture->is_selected) {
-					if (m_renderer.get_num_pointclouds() < POINTCLOUD_MAX_NUM) {
-						auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
-						pc->set_color(Helper::get_pc_color_by_index(i));
-						pc->load_from_capture(capture->depth_image, capture->color_image, capture->calibration, capture->camera_orientation);
-						capture->data_pointer = m_renderer.add_pointcloud(pc);
-						capture->is_selected = true;
-					}
-					else {
-						Logger::log(std::format("Maximum number of pointclouds reached ({})", POINTCLOUD_MAX_NUM), LoggingSeverity::Error);
-					}
-				}
-				else {
-					to_remove = capture->data_pointer;
-					capture->is_selected = false;
+		if (!capture->is_colmap && ImGui::Checkbox("##Select", &capture->is_selected)) {
+
+			m_render_menu_open = false;
+			m_selected_edit_idx = -1;
+			m_renderer.set_selected(nullptr);
+
+			if (capture->is_selected) {
+				auto pc = capture->data_pointer;
+				if (capture->data_pointer) {
+					capture->data_pointer->m_loaded = true;
 				}
 			}
+			else {
+				capture->data_pointer->m_loaded = false;
+			}
+		}
+
+		ImGui::SameLine();
+		ImGui::Text(std::format("Capture \"{}\"", capture->name).c_str());
+
+		if (m_app_state == AppState::Pointcloud) {
+			bool current_capture_is_selected = m_selected_edit_idx == i;
+			if (current_capture_is_selected)
+				ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered));
+
 			ImGui::SameLine();
-			ImGui::SetCursorPosX(ImGui::GetContentRegionAvail().x);
-			if (ImGui::Button("img", {40, 25})) {
-				ImGui::OpenPopup("Image preview");
-			}
-
-			if (ImGui::BeginPopup("Image preview")) {
-				ImVec2 image_dims = { (float)capture->preview_image.width(), (float)capture->preview_image.height() };
-				ImVec2 preview_dims = { 1280.f, 720.f };
-				float image_aspect_ratio = image_dims.x / image_dims.y;
-				float preview_aspect_ratio = preview_dims.x / preview_dims.y;
-				if (image_aspect_ratio > preview_aspect_ratio) {
-					image_dims = { preview_dims.x, preview_dims.x / image_aspect_ratio };
+			if (ImGui::Button("Edit")) {
+				m_align_target_idx = -1;
+				if (current_capture_is_selected) {
+					m_selected_edit_idx = -1;
+					m_renderer.set_selected(nullptr);
+					m_render_menu_open = false;
 				}
 				else {
-					image_dims = { preview_dims.y * image_aspect_ratio, preview_dims.y };
-				}
-				ImGui::Image((ImTextureID)(intptr_t)capture->preview_image.view(), image_dims);
-
-				ImGui::EndPopup();
-			}
-
-
-			if (m_app_state == AppState::Pointcloud && capture->is_selected) {
-
-				glm::vec3 scale, translation, skew;
-				glm::vec4 perspective;
-				glm::quat rotation_rad;
-				glm::decompose(capture->transform, scale, rotation_rad, translation, skew, perspective);
-
-				glm::vec3 rotation_deg = Helper::quat_to_euler_degrees(rotation_rad);
-
-				ImGui::DragFloat3("Position", &translation.x, 1.f, -100.f, 100.f);
-				ImGui::DragFloat3("Rotation", &rotation_deg.x, 1.f, -180.f, 180.f);
-				ImGui::DragFloat("Scale", &scale.x, 1.f, .1f, 100.f);
-
-				glm::mat4 new_transform = glm::translate(glm::mat4(1.f), translation) *
-					glm::toMat4(Helper::euler_degrees_to_quat(rotation_deg)) *
-					glm::scale(glm::mat4(1.f), glm::vec3(scale.x));
-
-				capture->transform = new_transform;
-
-				if (ImGui::Button("Reset")) {
-					capture->transform = glm::mat4(1.f);
+					m_selected_edit_idx = i;
+					m_renderer.set_selected(capture->data_pointer);
+					m_render_menu_open = true;
 				}
 				
 			}
 
-			ImGui::TreePop();
+			if (current_capture_is_selected)
+				ImGui::PopStyleColor();
+		}
+
+		ImGui::SameLine();
+
+		{
+			if (capture->is_colmap)
+				ImGui::BeginDisabled();
+
+			if (ImGui::Button("Show image")) {
+				ImGui::OpenPopup("Image preview");
+			}
+
+			if (capture->is_colmap)
+				ImGui::EndDisabled();
+		}
+
+		if (ImGui::BeginPopup("Image preview")) {
+			ImVec2 image_dims = { (float)capture->preview_image.width(), (float)capture->preview_image.height() };
+			ImVec2 preview_dims = { 1280.f, 720.f };
+			float image_aspect_ratio = image_dims.x / image_dims.y;
+			float preview_aspect_ratio = preview_dims.x / preview_dims.y;
+			if (image_aspect_ratio > preview_aspect_ratio) {
+				image_dims = { preview_dims.x, preview_dims.x / image_aspect_ratio };
+			}
+			else {
+				image_dims = { preview_dims.y * image_aspect_ratio, preview_dims.y };
+			}
+			ImGui::Image((ImTextureID)(intptr_t)capture->preview_image.view(), image_dims);
+
+			ImGui::EndPopup();
+		}
+
+		ImGui::SameLine();
+		ImGui::SetCursorPosX(GUI_MENU_WIDTH - 50);
+		if (ImGui::Button("x")) {
+			m_renderer.remove_pointcloud(capture->data_pointer);
+			m_capture_sequence.remove_capture(capture);
+			delete capture;
 		}
 
 		ImGui::Separator();
@@ -630,115 +700,64 @@ void Application::render_capture_menu()
 	ImGui::Separator();
 
 	if (m_app_state == AppState::Capture && m_camera.is_initialized()) {
-		if (ImGui::Button("Capture [space]") || ImGui::IsKeyPressed(ImGuiKey_Space)) {
+		if (ImGui::Button("Capture [space]", ImVec2(ImGui::GetContentRegionAvail().x, 40)) || ImGui::IsKeyPressed(ImGuiKey_Space)) {
 			capture();
 		}
-		
-		/*if (ImGui::Button("Save")) {
-			m_capture_sequence.save_sequence();
-		}*/
-		ImGui::SameLine();
-		if (ImGui::Button("Reset")) {
-			for (auto capture : m_capture_sequence.captures()) {
-				delete capture;
-			}
-			m_capture_sequence.captures().clear();
 
-			m_renderer.clear_pointclouds();
-		}
+		ImGui::SameLine();
 		
 		if (ImGui::Button("Calibrate")) {
 			m_camera.calibrate_sensors();
 		}
 
-		{
-			if (m_capture_sequence.captures().size() < 1)
-				ImGui::BeginDisabled();
-
-			if (ImGui::Button("Generate Pointcloud")) {
-				// save all captured images to /tmp/colmap/images
-				m_capture_sequence.save_images(TMP_DIR "/colmap/images");
-
-				// run colmap on saved images
-				run_colmap();
-				
-				CameraCapture* capture = new CameraCapture();
-				capture->id = m_capture_sequence.get_next_id();
-				capture->name = "COLMAP Pointcloud";
-				capture->is_selected = true;
-				capture->is_colmap = true;
-				capture->transform = glm::mat4(1.f);
-				capture->camera_orientation = glm::quat();
-				m_capture_sequence.add_capture(capture);
-				CameraCaptureSequence::s_capturelist_updated = true;
-
-				auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
-				pc->set_is_colmap(true);
-				pc->load_from_points3D(TMP_DIR "/colmap/sparse/0/points3D.bin");
-				m_renderer.add_pointcloud(pc);
-
-				m_app_state = AppState::Pointcloud;
-			}
-
-			if (m_capture_sequence.captures().size() < 1)
-				ImGui::EndDisabled();
-		}
+		
 		
 	}
 	else if (m_app_state == AppState::Pointcloud) {
-		if (ImGui::Button("Load Test-PLY")) {
 
-			{
-				CameraCapture* capture = new CameraCapture();
-				capture->id = m_capture_sequence.get_next_id();
-				capture->name = "Test 1";
-				capture->is_selected = true;
-				//capture->transform = glm::mat4(1.f) * glm::toMat4(glm::quat(glm::radians(glm::vec3(0.f, 0.f, 0.f))));
-				capture->transform = glm::mat4(1.f);
-				capture->camera_orientation = glm::quat();
-				m_capture_sequence.add_capture(capture);
-				CameraCaptureSequence::s_capturelist_updated = true;
 
-				auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
-				pc->set_color({ 0.f, 1.f, 0.f });
-				pc->load_from_ply(RESOURCE_DIR "/depth_point_cloud.ply", glm::mat4(1.f));
-				m_renderer.add_pointcloud(pc);
-			}
+		if (!m_camera.is_initialized())
+			ImGui::BeginDisabled();
 
-			{
-				CameraCapture* capture = new CameraCapture();
-				capture->id = m_capture_sequence.get_next_id();
-				capture->name = "Test 2";
-				capture->is_selected = true;
-				//capture->transform = glm::translate(glm::mat4(1.f) * glm::toMat4(glm::quat(glm::radians(glm::vec3(0.f, 0.f, 0.f)))), glm::vec3(1.f, 0.f, 0.f));
-				capture->transform = glm::mat4(1.f);
-				capture->camera_orientation = glm::quat();
-				m_capture_sequence.add_capture(capture);
-				CameraCaptureSequence::s_capturelist_updated = true;
-
-				glm::mat4 initial_transform = glm::translate(glm::mat4(1.f) * glm::toMat4(glm::quat(glm::radians(glm::vec3(0.f, 0.f, 0.f)))), glm::vec3(100.f, 0.f, 0.f));
-				
-				auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
-				pc->set_color({ 1.f, 0.f, 0.f });
-				pc->load_from_ply(RESOURCE_DIR "/depth_point_cloud.ply", initial_transform);
-				m_renderer.add_pointcloud(pc);
-			}
-		}
-
-		ImGui::Separator();
-		ImGui::Text("ICP settings");
-		static int icp_max_iter = 50;
-		static float icp_max_corr_dist = 1.f;
-		ImGui::SliderInt("Max. Iterations", &icp_max_iter, 1, 50);
-		ImGui::SliderFloat("Max. Correspondence Distance", &icp_max_corr_dist, 0.01, 5.0);
-
-		if (ImGui::Button("Align")) {
-			m_renderer.align_pointclouds(icp_max_iter, icp_max_corr_dist);
-		}
-
-		if (ImGui::Button("Export")) {
+		if (ImGui::Button("Export", ImVec2(ImGui::GetContentRegionAvail().x, 40))) {
 			export_for_3dgs();
 		}
+
+		if (!m_camera.is_initialized())
+			ImGui::EndDisabled();
+	}
+
+	{
+		if (m_capture_sequence.captures().size() < 1)
+			ImGui::BeginDisabled();
+
+		if (ImGui::Button("Run COLMAP")) {
+			// save all captured images to /tmp/colmap/images
+			m_capture_sequence.save_images(TMP_DIR "/colmap/images");
+
+			// run colmap on saved images
+			run_colmap();
+
+			CameraCapture* capture = new CameraCapture();
+			capture->id = m_capture_sequence.get_next_id();
+			capture->name = "COLMAP Pointcloud";
+			capture->is_selected = true;
+			capture->is_colmap = true;
+			capture->transform = glm::mat4(1.f);
+			capture->camera_orientation = glm::quat();
+			m_capture_sequence.add_capture(capture);
+			CameraCaptureSequence::s_capturelist_updated = true;
+
+			auto pc = new Pointcloud(m_device, m_queue, &capture->transform);
+			pc->set_is_colmap(true);
+			pc->load_from_points3D(TMP_DIR "/colmap/sparse/0/points3D.bin");
+			m_renderer.add_pointcloud(pc);
+
+			m_app_state = AppState::Pointcloud;
+		}
+
+		if (m_capture_sequence.captures().size() < 1)
+			ImGui::EndDisabled();
 	}
 }
 
@@ -760,6 +779,9 @@ void Application::render_debug()
 		}
 
 		ImGui::SliderFloat("Point size", &m_renderer.uniforms().point_size, .01f, 1.f);
+
+		ImGui::SliderFloat("Camera frustum size", &m_renderer.frustum_size(), .1f, 10.f);
+		ImGui::SliderFloat("Camera frustum distance", &m_renderer.frustum_dist(), .1f, 10.f);
 	}
 
 	ImGui::End();
@@ -793,9 +815,29 @@ void Application::render_content()
 			break;
 
 		case AppState::Pointcloud:
+		{
 			m_renderer.on_frame();
-			break;
+			int i = 0;
+			ImGui::Begin(GUI_WINDOW_POINTCLOUD_TITLE, nullptr, GUI_WINDOW_POINTCLOUD_FLAGS);
 
+			for (auto& capture : m_capture_sequence.captures()) {
+				if (capture->data_pointer != nullptr) {
+					ImU32 color = IM_COL32(255, 255, 255, 255);
+					if (m_selected_edit_idx > -1) {
+						if (i != m_selected_edit_idx)
+							color = IM_COL32(255, 255, 255, 150);
+						else
+							color = IM_COL32(45, 255, 230, 255);
+					}
+
+					m_renderer.draw_camera(capture->data_pointer, color);
+				}
+				i++;
+			}
+			ImGui::End();
+
+			break;
+		}
 		case AppState::Default:
 		default:
 			break;
@@ -821,8 +863,8 @@ void Application::render_menu()
 			ImGuiExtensions::ButtonColorChanger button_color_changer(ImGuiExtensions::ButtonColor::Green, can_open);
 			if (ImGuiExtensions::K4AButton("Open device", can_open)) {
 				m_camera.on_init(m_device, m_queue, *m_k4a_device_selector.selected_device(), m_window_width - GUI_MENU_WIDTH, m_window_height - GUI_CONSOLE_HEIGHT);
-				if(m_camera.is_initialized())
-					m_app_state = AppState::Capture;
+				/*if(m_camera.is_initialized())
+					m_app_state = AppState::Capture;*/
 			}
 		}
 	}
@@ -885,6 +927,124 @@ void Application::render_menu()
 	ImGui::NewLine();
 
 	render_capture_menu();
+
+	ImGui::End();
+}
+
+void Application::render_edit_menu()
+{
+	if (m_selected_edit_idx < 0)
+		return;
+
+	if (m_app_state != AppState::Pointcloud)
+		return;
+	
+
+	if (m_selected_edit_idx >= m_capture_sequence.captures().size())
+		return;
+
+	auto& capture = m_capture_sequence.captures().at(m_selected_edit_idx);
+
+	
+	if (!m_render_menu_open) {
+		m_selected_edit_idx = -1;
+		m_align_target_idx = -1;
+		m_renderer.set_selected(nullptr);
+		
+		return;
+	}
+
+	ImGui::Begin(
+		"Edit Pointcloud", 
+		&m_render_menu_open,
+		ImGuiWindowFlags_NoMove | 
+		ImGuiWindowFlags_NoResize | 
+		ImGuiWindowFlags_AlwaysAutoResize 
+	);
+	ImGui::SetWindowPos({ GUI_MENU_WIDTH, 0.f });
+
+	glm::vec3 scale, translation, skew;
+	glm::vec4 perspective;
+	glm::quat rotation_rad;
+	glm::decompose(capture->transform, scale, rotation_rad, translation, skew, perspective);
+
+	glm::vec3 rotation_deg = Helper::quat_to_euler_degrees(rotation_rad);
+
+	ImGui::DragFloat3("Position", &translation.x, 1.f, -50.f, 50.f);
+	ImGui::DragFloat3("Rotation", &rotation_deg.x, 1.f, -180.f, 180.f);
+	ImGui::DragFloat("Scale", &scale.x, 1.f, .1f, 100.f);
+
+	
+
+	if (rotation_deg.x > 180.f) rotation_deg.x -= 360.f;
+	else if (rotation_deg.x < -180.f) rotation_deg.x += 360.f;
+	if (rotation_deg.y > 180.f) rotation_deg.y -= 360.f;
+	else if (rotation_deg.y < -180.f) rotation_deg.y += 360.f;
+	if (rotation_deg.z > 180.f) rotation_deg.z -= 360.f;
+	else if (rotation_deg.z < -180.f) rotation_deg.z += 360.f;
+
+
+	glm::mat4 new_transform = glm::translate(glm::mat4(1.f), translation) *
+		glm::toMat4(Helper::euler_degrees_to_quat(rotation_deg)) *
+		glm::scale(glm::mat4(1.f), glm::vec3(scale.x));
+
+	capture->transform = new_transform;
+
+	if (ImGui::Button("Reset")) {
+		capture->transform = glm::mat4(1.f);
+	}
+
+	ImGui::Separator();
+	ImGui::Text("ICP settings");
+	static int icp_max_iter = 50;
+	static float icp_max_corr_dist = 1.f;
+	ImGui::SliderInt("Max. Iterations", &icp_max_iter, 1, 500);
+	ImGui::SliderFloat("Max. Correspondence Distance", &icp_max_corr_dist, 0.01, 5.0);
+
+	std::vector<std::string> items = m_capture_sequence.get_capturenames();
+	
+
+	if (ImGui::BeginCombo("Target", m_align_target_idx == -1 ? "<select>" : items.at(m_align_target_idx).c_str()))
+	{
+		for (int n = 0; n < items.size(); n++)
+		{
+			if (n == m_selected_edit_idx)
+				continue;
+
+			if (!m_capture_sequence.capture_at_idx(n)->is_selected)
+				continue;
+			
+			bool is_selected = (m_align_target_idx == n);
+			if (ImGui::Selectable(items.at(n).c_str(), is_selected)) {
+				m_align_target_idx = n;
+			}
+				
+			if (is_selected)
+				ImGui::SetItemDefaultFocus();
+		}
+		ImGui::EndCombo();
+	}
+
+	bool button_align_disabled = m_align_target_idx == -1;
+	{
+		if (button_align_disabled)
+			ImGui::BeginDisabled();
+
+		if (ImGui::Button("Align")) {
+			auto target_capture = m_capture_sequence.capture_at_idx(m_align_target_idx);
+			Logger::log(std::format("source: {} -> target: {}", capture->name, target_capture->name));
+			m_renderer.align_pointclouds(icp_max_iter, icp_max_corr_dist, capture->data_pointer, target_capture->data_pointer);
+			m_align_target_idx = -1;
+		}
+
+		if (button_align_disabled)
+			ImGui::EndDisabled();
+	}
+
+	if (button_align_disabled && ImGui::BeginItemTooltip()) {
+		ImGui::Text("Select a target first");
+		ImGui::EndTooltip();
+	}
 
 	ImGui::End();
 }

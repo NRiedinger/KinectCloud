@@ -155,7 +155,7 @@ void Camera::on_frame()
 
 	update_movement();
 
-	ImGui::Begin("Camera Capture Window", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
+	ImGui::Begin("Camera Capture Window", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoBringToFrontOnFocus);
 	ImGui::SetWindowPos({ GUI_MENU_WIDTH, 0.f });
 	ImGui::SetWindowSize({ (float)m_width, (float)m_height });
 
@@ -174,7 +174,7 @@ void Camera::on_frame()
 	ImGui::SetCursorPos({ (viewport_dims.x - image_dims.x) * .5f + 7, (viewport_dims.y - image_dims.y) * .5f + 7 });
 	ImGui::Image((ImTextureID)(intptr_t)m_color_texture.view(), image_dims);
 
-	draw_gizmos();
+	// draw_gizmos();
 
 	ImGui::End();
 }
@@ -291,7 +291,7 @@ void Camera::calibrate_sensors()
 void Camera::draw_gizmos()
 {
 	glm::mat4 projection_mat = glm::perspective((float)(45 * M_PI / 180), (float)(m_width / m_height), POINTCLOUD_CAMERA_PLANE_NEAR, POINTCLOUD_CAMERA_PLANE_FAR);
-	glm::mat4 view_mat = glm::lookAt(glm::vec3(10.f), glm::vec3(0.f), glm::vec3(0, 0, 1));
+	glm::mat4 view_mat = glm::lookAt(glm::vec3(10.f), glm::vec3(0.f), VECTOR_UP);
 
 	static auto project = [&](glm::vec3 p) -> ImVec2 {
 
@@ -348,7 +348,7 @@ void Camera::save_camera_intrinsics(std::filesystem::path path)
 
 	const auto intrinsics = m_calibration.color_camera_calibration.intrinsics;
 
-	int camera_id = 1;
+	/*int camera_id = 1;
 	std::string camera_model = "OPENCV";
 	int width = m_calibration.color_camera_calibration.resolution_width;
 	int height = m_calibration.color_camera_calibration.resolution_height;
@@ -362,7 +362,19 @@ void Camera::save_camera_intrinsics(std::filesystem::path path)
 	float p2 = m_calibration.color_camera_calibration.intrinsics.parameters.param.p2;
 
 	ofs << std::format("{} {} {} {} {} {} {} {} {} {} {} {} \n",
-					   camera_id, camera_model, width, height, fx, fy, cx, cy, k1, k2, p1, p2);
+					   camera_id, camera_model, width, height, fx, fy, cx, cy, k1, k2, p1, p2);*/
+	int camera_id = 1;
+	std::string camera_model = "PINHOLE";
+	int width = m_calibration.color_camera_calibration.resolution_width;
+	int height = m_calibration.color_camera_calibration.resolution_height;
+	float fx = m_calibration.color_camera_calibration.intrinsics.parameters.param.fx;
+	float fy = m_calibration.color_camera_calibration.intrinsics.parameters.param.fy;
+	float cx = m_calibration.color_camera_calibration.intrinsics.parameters.param.cx;
+	float cy = m_calibration.color_camera_calibration.intrinsics.parameters.param.cy;
+
+
+	ofs << std::format("{} {} {} {} {} {} {} {} \n",
+					   camera_id, camera_model, width, height, fx, fy, cx, cy);
 
 	ofs.close();
 }

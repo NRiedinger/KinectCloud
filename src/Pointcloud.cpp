@@ -36,12 +36,11 @@ Pointcloud::~Pointcloud()
 	m_points.clear();
 }
 
-void Pointcloud::load_from_capture(k4a::image depth_image, k4a::image color_image, k4a::calibration calibration, glm::quat cam_orientation)
+void Pointcloud::load_from_capture(k4a::image depth_image, k4a::image color_image, k4a::calibration calibration)
 {
 	m_depth_image = depth_image;
 	m_color_image = color_image;
 	m_calibration = calibration;
-	m_cam_orientation = cam_orientation;
 
 	capture_point_cloud();
 }
@@ -280,9 +279,12 @@ void Pointcloud::generate_point_cloud(const k4a::image xy_table, k4a::image poin
 		PointAttributes point;
 		static float scale = 1.f / 100.f;
 
-		point.position.x = (float)-point_cloud_data[i].xyz.x * scale;
+		/*point.position.x = (float)-point_cloud_data[i].xyz.x * scale;
 		point.position.y = (float)point_cloud_data[i].xyz.z * scale;
-		point.position.z = (float)-point_cloud_data[i].xyz.y * scale;
+		point.position.z = (float)-point_cloud_data[i].xyz.y * scale;*/
+		point.position.x = (float)-point_cloud_data[i].xyz.x * scale;
+		point.position.y = (float)point_cloud_data[i].xyz.y * scale;
+		point.position.z = (float)point_cloud_data[i].xyz.z * scale;
 
 		point.color.r = r / 255.f;
 		point.color.g = g / 255.f;
@@ -300,7 +302,7 @@ void Pointcloud::generate_point_cloud(const k4a::image xy_table, k4a::image poin
 	}
 }
 
-void Pointcloud::write_point_cloud_to_buffer(/*const k4a::image point_cloud, int point_count*/)
+void Pointcloud::write_point_cloud_to_buffer()
 {
 	wgpu::BufferDescriptor bufferDesc{};
 	bufferDesc.size = m_points.size() * sizeof(PointAttributes);

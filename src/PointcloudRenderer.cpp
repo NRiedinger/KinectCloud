@@ -120,39 +120,47 @@ float PointcloudRenderer::get_futhest_point()
 	return value;
 }
 
-void PointcloudRenderer::align_pointclouds(int max_iter, float max_corr_dist)
+void PointcloudRenderer::set_selected(Pointcloud* pc)
 {
-	static auto vector_to_pointcloud = [](const std::vector<PointAttributes>& vec, const glm::mat4 trans_mat) {
-		auto cloud = std::make_shared<pcl::PointCloud<pcl::PointXYZRGB>>();
-		cloud->width = static_cast<uint32_t>(vec.size());
-		cloud->height = 1;
-		cloud->is_dense = false;
-		cloud->points.resize(vec.size());
+	m_selected_pointcloud = pc;
+}
 
-		for (size_t i = 0; i < vec.size(); i++) {
-			const auto& pt = vec[i];
+std::shared_ptr<pcl::PointCloud<pcl::PointXYZRGB>> PointcloudRenderer::vector_to_pointcloud(const std::vector<PointAttributes>& vec, const glm::mat4 trans_mat) {
+	auto cloud = std::make_shared<pcl::PointCloud<pcl::PointXYZRGB>>();
+	cloud->width = static_cast<uint32_t>(vec.size());
+	cloud->height = 1;
+	cloud->is_dense = false;
+	cloud->points.resize(vec.size());
 
-			glm::vec4 transformed_point = trans_mat * glm::vec4(
-				pt.position.x,
-				pt.position.y,
-				pt.position.z,
-				1.f);
+	for (size_t i = 0; i < vec.size(); i++) {
+		const auto& pt = vec[i];
 
-			pcl::PointXYZRGB p;
+		glm::vec4 transformed_point = trans_mat * glm::vec4(
+			pt.position.x,
+			pt.position.y,
+			pt.position.z,
+			1.f);
 
-			p.x = transformed_point.x;
-			p.y = transformed_point.y;
-			p.z = transformed_point.z;
+		pcl::PointXYZRGB p;
 
-			p.r = static_cast<uint8_t>(pt.color.r * 255.f);
-			p.g = static_cast<uint8_t>(pt.color.g * 255.f);
-			p.b = static_cast<uint8_t>(pt.color.b * 255.f);
+		p.x = transformed_point.x;
+		p.y = transformed_point.y;
+		p.z = transformed_point.z;
 
-			cloud->points[i] = p;
-		}
+		p.r = static_cast<uint8_t>(pt.color.r * 255.f);
+		p.g = static_cast<uint8_t>(pt.color.g * 255.f);
+		p.b = static_cast<uint8_t>(pt.color.b * 255.f);
 
-		return cloud;
-	};
+		cloud->points[i] = p;
+	}
+
+	return cloud;
+}
+
+void PointcloudRenderer::align_pointclouds(int max_iter, float max_corr_dist, Pointcloud* source, Pointcloud* target)
+{
+	if (!source || !target)
+		return;
 
 	static auto eigen_to_glm = [](const Eigen::Matrix4f& eigen_mat) {
 		glm::mat4 glm_mat;
@@ -172,13 +180,8 @@ void PointcloudRenderer::align_pointclouds(int max_iter, float max_corr_dist)
 
 	Logger::log("ICP started");
 
-	auto target_cloud = vector_to_pointcloud(m_pointclouds[0]->points(), *m_pointclouds[0]->get_transform_ptr());
-
-	// TODO: loop through every pc and align to COLMAP pointcloud
-
-	int i = 1;
-
-	auto source_cloud = vector_to_pointcloud(m_pointclouds[i]->points(), *m_pointclouds[i]->get_transform_ptr());
+	auto source_cloud = vector_to_pointcloud(source->points(), *source->get_transform_ptr());
+	auto target_cloud = vector_to_pointcloud(target->points(), *target->get_transform_ptr());
 
 
 	pcl::IterativeClosestPoint<pcl::PointXYZRGB, pcl::PointXYZRGB> icp;
@@ -197,10 +200,13 @@ void PointcloudRenderer::align_pointclouds(int max_iter, float max_corr_dist)
 		Logger::log(std::format("ICP converged. Fitness Score: {}", icp.getFitnessScore()));
 
 		// Transformation ausgeben
-		auto transform = eigen_to_glm(icp.getFinalTransformation());
-		Logger::log(std::format("Transformationmatrix:\n{}", Helper::mat4_to_string(transform)));
+		glm::mat4 transform_delta = eigen_to_glm(icp.getFinalTransformation());
+		glm::mat4 transform_old = *source->get_transform_ptr();
+		glm::mat4 transform_new = transform_delta * transform_old;
 
-		m_pointclouds[i]->set_transform(transform);
+		Logger::log(std::format("Transformationmatrix:\n{}", Helper::mat4_to_string(transform_delta)));
+
+		source->set_transform(transform_new);
 	}
 	else {
 		Logger::log("ICP failed to converge.", LoggingSeverity::Warning);
@@ -300,7 +306,7 @@ bool PointcloudRenderer::init_renderpipeline()
 
 
 	// binding layout
-	wgpu::BindGroupLayoutEntry bindgroup_layout_entries[] = {wgpu::Default, wgpu::Default};
+	wgpu::BindGroupLayoutEntry bindgroup_layout_entries[] = {wgpu::Default, wgpu::Default, wgpu::Default};
 	bindgroup_layout_entries[0].binding = 0;
 	bindgroup_layout_entries[0].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
 	bindgroup_layout_entries[0].buffer.type = wgpu::BufferBindingType::Uniform;
@@ -313,8 +319,14 @@ bool PointcloudRenderer::init_renderpipeline()
 	bindgroup_layout_entries[1].buffer.minBindingSize = sizeof(glm::mat4);
 	bindgroup_layout_entries[1].buffer.hasDynamicOffset = true;
 
+	bindgroup_layout_entries[2].binding = 2;
+	bindgroup_layout_entries[2].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
+	bindgroup_layout_entries[2].buffer.type = wgpu::BufferBindingType::Uniform;
+	bindgroup_layout_entries[2].buffer.minBindingSize = 64;
+	bindgroup_layout_entries[2].buffer.hasDynamicOffset = true;
+
 	wgpu::BindGroupLayoutDescriptor bindgroup_layout_desc{};
-	bindgroup_layout_desc.entryCount = 2;
+	bindgroup_layout_desc.entryCount = 3;
 	bindgroup_layout_desc.entries = bindgroup_layout_entries;
 	m_bindgroup_layout = m_device.createBindGroupLayout(bindgroup_layout_desc);
 	if (!m_bindgroup_layout) {
@@ -380,10 +392,26 @@ bool PointcloudRenderer::init_uniforms()
 	if (!m_transform_buffer) {
 		std::cerr << "Could not create transform buffer!" << std::endl;
 	}
+	
+	
+
+	wgpu::BufferDescriptor opacity_buffer_desc{};
+	opacity_buffer_desc.size = 64 * POINTCLOUD_MAX_NUM;
+	opacity_buffer_desc.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::Uniform;
+	opacity_buffer_desc.mappedAtCreation = false;
+	m_opacity_buffer = m_device.createBuffer(opacity_buffer_desc);
+	if (!m_opacity_buffer) {
+		std::cerr << "Could not create opacity buffer!" << std::endl;
+	}
+
 	glm::mat4 default_transform(1.f);
+	float default_opacity = 1.f;
 	for (int i = 0; i < POINTCLOUD_MAX_NUM; i++) {
-		uint32_t ubo_offset = sizeof(glm::mat4) * i;
-		m_queue.writeBuffer(m_transform_buffer, ubo_offset, &default_transform, sizeof(glm::mat4));
+		uint32_t ubo_transform_offset = sizeof(glm::mat4) * i;
+		m_queue.writeBuffer(m_transform_buffer, ubo_transform_offset, &default_transform, sizeof(glm::mat4));
+
+		uint32_t ubo_opacity_offset = (((sizeof(float) + 64 - 1) / 64) * 64) * i;
+		m_queue.writeBuffer(m_opacity_buffer, ubo_opacity_offset, &default_opacity, sizeof(float));
 	}
 
 	return true;
@@ -397,7 +425,7 @@ void PointcloudRenderer::terminate_uniforms()
 
 bool PointcloudRenderer::init_bindgroup()
 {
-	wgpu::BindGroupEntry bindings[] = {wgpu::Default, wgpu::Default};
+	wgpu::BindGroupEntry bindings[] = {wgpu::Default, wgpu::Default, wgpu::Default};
 	bindings[0].binding = 0;
 	bindings[0].buffer = m_renderuniform_buffer;
 	bindings[0].offset = 0;
@@ -408,9 +436,14 @@ bool PointcloudRenderer::init_bindgroup()
 	bindings[1].offset = 0;
 	bindings[1].size = sizeof(glm::mat4);
 
+	bindings[2].binding = 2;
+	bindings[2].buffer = m_opacity_buffer;
+	bindings[2].offset = 0;
+	bindings[2].size = 64;
+
 	wgpu::BindGroupDescriptor bindGroupDesc{};
 	bindGroupDesc.layout = m_bindgroup_layout;
-	bindGroupDesc.entryCount = 2;
+	bindGroupDesc.entryCount = 3;
 	bindGroupDesc.entries = bindings;
 	m_bindgroup = m_device.createBindGroup(bindGroupDesc);
 	if (!m_bindgroup) {
@@ -481,19 +514,19 @@ void PointcloudRenderer::update_projectionmatrix()
 void PointcloudRenderer::update_viewmatrix()
 {
 	glm::vec3 position = m_camerastate.get_camera_position();
-	m_renderuniforms.view_mat = glm::lookAt(position, glm::vec3(0.f), glm::vec3(0, 0, 1));
+	m_renderuniforms.view_mat = glm::lookAt(position, glm::vec3(0.f), VECTOR_UP);
 	m_queue.writeBuffer(m_renderuniform_buffer, offsetof(Uniforms::RenderUniforms, view_mat), &m_renderuniforms.view_mat, sizeof(Uniforms::RenderUniforms::view_mat));
 }
 
 void PointcloudRenderer::handle_pointcloud_mouse_events()
 {
 	ImVec2 mouse_pos = ImGui::GetMousePos();
-
+	glm::vec2 mouse_vec(mouse_pos.x, mouse_pos.y);
 
 	// drag camera
 	if (ImGui::IsWindowHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left) && !m_dragstate.active) {
 		m_dragstate.active = true;
-		m_dragstate.startMouse = glm::vec2(mouse_pos.x, mouse_pos.y);
+		m_dragstate.startMouse = glm::vec2(mouse_vec);
 		m_dragstate.startCameraState = m_camerastate;
 	}
 	if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
@@ -501,22 +534,34 @@ void PointcloudRenderer::handle_pointcloud_mouse_events()
 	}
 
 	if (m_dragstate.active) {
-		glm::vec2 currentMouse = glm::vec2(mouse_pos.x, mouse_pos.y);
+		glm::vec2 currentMouse = glm::vec2(mouse_vec);
 		glm::vec2 delta = (currentMouse - m_dragstate.startMouse) * m_dragstate.SENSITIVITY;
-		m_camerastate.angles = m_dragstate.startCameraState.angles + delta;
+		//m_camerastate.angles = m_dragstate.startCameraState.angles + delta;
+		m_camerastate.angles.x = m_dragstate.startCameraState.angles.x + delta.y; // pitch (um x)
+		m_camerastate.angles.y = m_dragstate.startCameraState.angles.y - delta.x; // yaw (um -y)
+
 
 		// clamp pitch
-		m_camerastate.angles.y = glm::clamp(m_camerastate.angles.y, -(float)M_PI / 2 + 1e-5f, (float)M_PI / 2 - 1e-5f);
+		//m_camerastate.angles.y = glm::clamp(m_camerastate.angles.y, -(float)M_PI / 2 + 1e-5f, (float)M_PI / 2 - 1e-5f);
+		m_camerastate.angles.x = glm::clamp(m_camerastate.angles.x, -(float)M_PI / 2 + 1e-5f, (float)M_PI / 2 - 1e-5f);
+		// std::cout << glm::degrees(m_camerastate.angles.y) << std::endl;
+		
+		//m_camerastate.angles.y = glm::clamp(m_camerastate.angles.y, glm::radians(-180.f + 1e-5f), glm::radians(0.f - 1e-5f));
 		// clamp yaw
 		
-		float yaw = glm::degrees(m_camerastate.angles.x);
+		/*float yaw = glm::degrees(m_camerastate.angles.x);
 		if (yaw > 360.f) {
 			yaw -= 360.f;
 		}
 		else if (yaw < 0.f) {
 			yaw += 360.f;
 		}
-		m_camerastate.angles.x = glm::radians(yaw);
+		m_camerastate.angles.x = glm::radians(yaw);*/
+		// Normalize yaw (y-Achse)
+		float yaw_deg = glm::degrees(m_camerastate.angles.y);
+		if (yaw_deg > 360.f) yaw_deg -= 360.f;
+		else if (yaw_deg < 0.f) yaw_deg += 360.f;
+		m_camerastate.angles.y = glm::radians(yaw_deg);
 		update_viewmatrix();
 	}
 
@@ -545,6 +590,10 @@ void PointcloudRenderer::write_points3D(std::filesystem::path path)
 
 	int id = 1;
 	for (const auto& pc : m_pointclouds) {
+		if (!pc->m_loaded)
+			continue;
+
+
 		for (const auto& p : pc->points()) {
 			if (!std::isfinite(p.position.x) ||
 				!std::isfinite(p.position.y) ||
@@ -552,11 +601,14 @@ void PointcloudRenderer::write_points3D(std::filesystem::path path)
 				continue;
 			}
 
+			glm::vec4 transformed = *pc->get_transform_ptr() * glm::vec4(p.position.x, p.position.y, p.position.z, 1.f);
+
 			// id
 			ofs << id++ << " ";
 			// pos
+			ofs << -transformed.x << " " << transformed.y << " " << transformed.z << " ";
 			//ofs << p.position.x << " " << p.position.y << " " << p.position.z << " ";
-			ofs << p.position.x / 1000.f << " " << p.position.y / 1000.f << " " << p.position.z / 1000.f << " ";
+			//ofs << p.position.x / 1000.f << " " << p.position.y / 1000.f << " " << p.position.z / 1000.f << " ";
 			// color
 			ofs << static_cast<int>(p.color.r * 255) << " " << static_cast<int>(p.color.g * 255) << " " << static_cast<int>(p.color.b * 255) << " ";
 			// error
@@ -574,6 +626,15 @@ Uniforms::RenderUniforms& PointcloudRenderer::uniforms()
 	return m_renderuniforms;
 }
 
+float& PointcloudRenderer::frustum_size()
+{
+	return m_render_frustum_size;
+}
+
+float& PointcloudRenderer::frustum_dist()
+{
+	return m_render_frustum_dist;
+}
 
 void PointcloudRenderer::on_frame()
 {
@@ -622,6 +683,9 @@ void PointcloudRenderer::on_frame()
 	int i = 0;
 	for (auto pc : m_pointclouds) {
 
+		if (!pc->m_loaded)
+			continue;
+
 		// glm::mat4 model = glm::scale(*pc->get_transform_ptr(), glm::vec3(100.f / get_futhest_point()));
 		glm::mat4 model = glm::scale(*pc->get_transform_ptr(), glm::vec3(1.f));
 		/*glm::quat cam_orienation = pc->camera_orienation();
@@ -640,15 +704,25 @@ void PointcloudRenderer::on_frame()
 		}
 		glm::mat4 leveled_model = glm::toMat4(leveling) * model;*/
 
-		uint32_t ubo_offset = sizeof(glm::mat4) * i;
+		
+		uint32_t ubo_transform_offset = sizeof(glm::mat4) * i;
+		//uint32_t ubo_opacity_offset = sizeof(float) * i;
+		uint32_t ubo_opacity_offset = (((sizeof(float) + 64 - 1) / 64) * 64) * i;
+		uint32_t ubos[] = { ubo_transform_offset , ubo_opacity_offset };
 
 		// not using leveled model matrix for now (issues)
 		//m_queue.writeBuffer(m_transform_buffer, ubo_offset, &leveled_model, sizeof(glm::mat4));
-		m_queue.writeBuffer(m_transform_buffer, ubo_offset, &model, sizeof(glm::mat4));
+		m_queue.writeBuffer(m_transform_buffer, ubo_transform_offset, &model, sizeof(glm::mat4));
+
+		float point_opacity = 1.f;
+		if (m_selected_pointcloud != nullptr && m_selected_pointcloud != pc) {
+			point_opacity = .25f;
+		}
+		m_queue.writeBuffer(m_opacity_buffer, ubo_opacity_offset, &point_opacity, sizeof(float));
 
 		passEncoder.setPipeline(m_renderpipeline);
 		passEncoder.setVertexBuffer(0, pc->pointbuffer(), 0, pc->pointbuffer().getSize());
-		passEncoder.setBindGroup(0, m_bindgroup, 1, &ubo_offset);
+		passEncoder.setBindGroup(0, m_bindgroup, 2, ubos);
 		passEncoder.draw(6, pc->pointcount(), 0, 0);
 
 		i++;
@@ -664,7 +738,7 @@ void PointcloudRenderer::on_frame()
 	encoder.release();
 	m_queue.submit(command);
 
-	ImGui::Begin("Pointcloud Window", nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
+	ImGui::Begin(GUI_WINDOW_POINTCLOUD_TITLE, nullptr, GUI_WINDOW_POINTCLOUD_FLAGS);
 	ImGui::SetWindowPos({ GUI_MENU_WIDTH, 0.f });
 	ImGui::SetWindowSize({ (float)m_width, (float)m_height });
 
@@ -674,6 +748,10 @@ void PointcloudRenderer::on_frame()
 	handle_pointcloud_mouse_events();
 
 	draw_gizmos();
+
+	/*for (auto pc : m_pointclouds) {
+		draw_camera(pc);
+	}*/
 	
 
 	ImGui::End();
@@ -721,4 +799,44 @@ void PointcloudRenderer::terminate_depthbuffer()
 	m_depthtexture_view.release();
 	m_depthtexture.destroy();
 	m_depthtexture.release();
+}
+
+void PointcloudRenderer::draw_camera(Pointcloud* pc, ImU32 color)
+{
+	glm::mat4 transform = *pc->get_transform_ptr();
+
+	float frustum_dist = m_render_frustum_dist;
+	float frustum_size = m_render_frustum_size;
+
+	glm::vec3 cam_origin_local = glm::vec3(0.f, 0.f, 0.f) - pc->centroid();
+	
+	glm::vec3 top_left_local = glm::vec3(-frustum_size, frustum_size, frustum_dist) - pc->centroid();
+	glm::vec3 top_right_local = glm::vec3(frustum_size, frustum_size, frustum_dist) - pc->centroid();
+	glm::vec3 bottom_left_local = glm::vec3(frustum_size, -frustum_size, frustum_dist) - pc->centroid();
+	glm::vec3 bottom_right_local = glm::vec3(-frustum_size, -frustum_size, frustum_dist) - pc->centroid();
+
+	/*glm::vec3 top_left_local = glm::vec3(-frustum_size, frustum_dist, frustum_size) - pc->centroid();
+	glm::vec3 top_right_local = glm::vec3(frustum_size, frustum_dist, frustum_size) - pc->centroid();
+	glm::vec3 bottom_left_local = glm::vec3(-frustum_size, frustum_dist, -frustum_size) - pc->centroid();
+	glm::vec3 bottom_right_local = glm::vec3(frustum_size, frustum_dist, -frustum_size) - pc->centroid();*/
+
+	glm::vec3 cam_origin_w = glm::vec3(transform * glm::vec4(cam_origin_local, 1.f));
+	glm::vec3 top_left_w = glm::vec3(transform * glm::vec4(top_left_local, 1.f));
+	glm::vec3 top_right_w = glm::vec3(transform * glm::vec4(top_right_local, 1.f));
+	glm::vec3 bottom_left_w = glm::vec3(transform * glm::vec4(bottom_left_local, 1.f));
+	glm::vec3 bottom_right_w = glm::vec3(transform * glm::vec4(bottom_right_local, 1.f));
+
+	auto drawlist = ImGui::GetWindowDrawList();
+
+	drawlist->AddLine(project(cam_origin_w), project(top_left_w), color);
+	drawlist->AddLine(project(cam_origin_w), project(top_right_w), color);
+	drawlist->AddLine(project(cam_origin_w), project(bottom_left_w), color);
+	drawlist->AddLine(project(cam_origin_w), project(bottom_right_w), color);
+
+	ImVec2 p1 = project(top_left_w);
+	ImVec2 p2 = project(top_right_w);
+	ImVec2 p3 = project(bottom_left_w);
+	ImVec2 p4 = project(bottom_right_w);
+
+	drawlist->AddQuadFilled(p1, p2, p3, p4, color);
 }

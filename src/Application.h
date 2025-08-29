@@ -47,7 +47,7 @@ private:
 	void render_console();
 	void render_content();
 	void render_menu();
-
+	void render_edit_menu();
 	
 
 private:
@@ -57,6 +57,9 @@ private:
 	bool m_is_minimized = false;
 
 	AppState m_app_state = AppState::Default;
+	int m_selected_edit_idx = -1;
+	int m_align_target_idx = -1;
+	bool m_render_menu_open = false;
 
 	PointcloudRenderer m_renderer;
 	CameraCaptureSequence m_capture_sequence;
@@ -68,6 +71,7 @@ private:
 	
 	// ImGui file dialogs
 	ImGui::FileBrowser m_save_dialog;
+	ImGui::FileBrowser m_saveimages_dialog;
 	ImGui::FileBrowser m_load_dialog;
 
 	wgpu::Device m_device = nullptr;

@@ -100,7 +100,7 @@ public:
 		}
 	}
 
-	inline static std::string get_current_time_string() {
+	inline static std::string get_current_datetime_string() {
 		auto now = std::chrono::system_clock::now();
 		std::time_t now_time_t = std::chrono::system_clock::to_time_t(now);
 		std::tm local_tm = *std::localtime(&now_time_t);
