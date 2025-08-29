@@ -12,8 +12,16 @@
 - feine automatische Ausrichtung der Punktwolken durch ICP
 - Export der Punktwolken und Kameraposen für [3D Gaussian Splatting](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/)
 
-<img src="./readme_media/capture-preview.png" width="49%"/>
-<img src="./readme_media/pointcloud.png" width="49%"/>
+<table>
+  <tr>
+    <td>
+      <img src="./readme_media/capture-preview.png"/>
+    </td>
+    <td>
+      <img src="./readme_media/pointcloud.png"/>
+    </td>
+  </tr>
+</table>
 
 ## Voraussetzungen
 
