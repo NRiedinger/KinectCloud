@@ -10,7 +10,7 @@
 #pragma once
 
 
-#define DEFAULT_WINDOW_TITLE "DepthSplat"
+#define DEFAULT_WINDOW_TITLE "KinectCloud v1.0.0"
 
 #define FPS 165.f
 
