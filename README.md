@@ -11,6 +11,7 @@
 - grobe manuelle Ausrichtung der Punktwolken
 - feine automatische Ausrichtung der Punktwolken durch ICP
 - Export der Punktwolken und Kameraposen für [3D Gaussian Splatting](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/)
+- COLMAP Binaries enthalten um direkt aus der Anwendung heraus SfM-Punktwolken zu generieren
 
 <table>
   <tr>
